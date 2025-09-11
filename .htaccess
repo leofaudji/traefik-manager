@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Jika aplikasi Anda berada di dalam subdirektori, hapus komentar di bawah dan sesuaikan path-nya.
+    # Contoh: RewriteBase /traefik-manager/
+    RewriteBase /traefik-manager/
+    # Arahkan semua permintaan ke index.php jika file atau direktori yang diminta tidak ada.
+    RewriteRule "(^|/)\." - [F]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    #RewriteRule ^ index.php [L]
+    RewriteRule ^(.*)$ index.php [L]
+</IfModule>
