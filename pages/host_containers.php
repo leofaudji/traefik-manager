@@ -45,10 +45,9 @@ require_once __DIR__ . '/../includes/host_nav.php';
                         <th>Image</th>
                         <th>State</th>
                         <th>Status</th>
-                        <th>Ports</th>
+                        <th>IP Address</th>
                         <th>Volumes</th>
                         <th>Networks</th>
-                        <th>CPU / Mem</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -98,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalBtnContent = refreshBtn.innerHTML;
         refreshBtn.disabled = true;
         refreshBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing...`;
-        containerBody.innerHTML = '<tr><td colspan="9" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
+        containerBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const fetchUrl = `${basePath}/api/hosts/${hostId}/containers?page=${page}&limit=${limit}&filter=${currentFilter}`;
 
@@ -128,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_containers_limit`, result.limit);
                 localStorage.setItem(`host_${hostId}_containers_filter`, currentFilter);
             })
-            .catch(error => containerBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Failed to load containers: ${error.message}</td></tr>`)
+            .catch(error => containerBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load containers: ${error.message}</td></tr>`)
             .finally(() => {
                 refreshBtn.disabled = false;
                 refreshBtn.innerHTML = originalBtnContent;

@@ -39,7 +39,6 @@ services:
       DB_NAME: traefik_manager
       DB_USERNAME: tm_user
       DB_PASSWORD: tm_password
-      # Pastikan path ini sesuai dengan volume mount #3 di atas.
       YAML_OUTPUT_PATH: /var/www/html/traefik-configs/dynamic.yml
     depends_on:
       - db

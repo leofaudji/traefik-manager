@@ -65,18 +65,20 @@ try {
             elseif ($state === 'exited') $stateBadgeClass = 'danger';
             elseif ($state === 'restarting') $stateBadgeClass = 'warning';
 
-            $portsHtml = '';
-            if (!empty($cont['Ports'])) {
-                $port_parts = [];
-                foreach ($cont['Ports'] as $p) {
-                    if (isset($p['PublicPort'])) {
-                        $port_parts[] = ($p['IP'] ?? '0.0.0.0') . ':' . $p['PublicPort'] . '->' . $p['PrivatePort'] . '/' . $p['Type'];
+            // Build IP Address HTML instead of Ports
+            $ipAddressHtml = '';
+            if (!empty($cont['NetworkSettings']['Networks'])) {
+                $ip_parts = [];
+                foreach ($cont['NetworkSettings']['Networks'] as $netName => $netDetails) {
+                    if (!empty($netDetails['IPAddress'])) {
+                        $ip_parts[] = '<code>' . htmlspecialchars($netDetails['IPAddress']) . '</code> <small class="text-muted">(' . htmlspecialchars($netName) . ')</small>';
                     }
                 }
-                $portsHtml = htmlspecialchars(implode(', ', $port_parts));
-            } else {
-                $portsHtml = '<span class="text-muted small">None</span>';
+                if (!empty($ip_parts)) {
+                    $ipAddressHtml = implode('<br>', $ip_parts);
+                }
             }
+            if (empty($ipAddressHtml)) $ipAddressHtml = '<span class="text-muted small">N/A</span>';
 
             // Build Volumes/Mounts HTML
             $volumesHtml = '';
@@ -114,7 +116,7 @@ try {
             $actionButtons .= "<button class=\"btn btn-sm btn-outline-primary view-logs-btn\" data-bs-toggle=\"modal\" data-bs-target=\"#viewLogsModal\" data-container-id=\"{$cont['Id']}\" data-container-name=\"{$name}\" title=\"View Logs\"><i class=\"bi bi-card-text\"></i></button>";
             $actionButtons .= '</div>';
 
-            $html .= "<tr><td>{$name}</td><td><small>" . htmlspecialchars($cont['Image']) . "</small></td><td><span class=\"badge bg-{$stateBadgeClass}\">{$state}</span></td><td>{$status}</td><td>{$portsHtml}</td><td>{$volumesHtml}</td><td>{$networksHtml}</td><td class=\"text-end\">{$actionButtons}</td></tr>";
+            $html .= "<tr><td>{$name}</td><td><small>" . htmlspecialchars($cont['Image']) . "</small></td><td><span class=\"badge bg-{$stateBadgeClass}\">{$state}</span></td><td>{$status}</td><td>{$ipAddressHtml}</td><td>{$volumesHtml}</td><td>{$networksHtml}</td><td class=\"text-end\">{$actionButtons}</td></tr>";
         }
     }
 

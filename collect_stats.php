@@ -32,34 +32,48 @@ try {
         echo "Processing host: {$host['name']}...\n";
         try {
             $dockerClient = new DockerClient($host);
+
+            // Get host-wide info first to get total memory and CPU count
+            $dockerInfo = $dockerClient->getInfo();
+            $host_total_memory = $dockerInfo['MemTotal'] ?? 0;
+            $host_total_cpus = $dockerInfo['NCPU'] ?? 1; // Fallback to 1 to avoid division by zero
+
             $containers = $dockerClient->listContainers();
 
-            $total_cpu_usage = 0.0;
-            $total_mem_usage = 0;
-            $total_mem_limit = 0;
+            $total_container_cpu_delta = 0;
+            $system_cpu_delta = 0;
+            $total_mem_usage_bytes = 0;
             $running_container_count = 0;
+            $first_stats_collected = false;
 
             foreach ($containers as $container) {
                 if ($container['State'] !== 'running') continue;
                 $running_container_count++;
                 $stats = $dockerClient->getContainerStats($container['Id']);
 
-                $total_mem_usage += $stats['memory_stats']['usage'] ?? 0;
-                $total_mem_limit += $stats['memory_stats']['limit'] ?? 0;
+                // Sum memory usage
+                $total_mem_usage_bytes += $stats['memory_stats']['usage'] ?? 0;
 
-                $cpu_delta = ($stats['cpu_stats']['cpu_usage']['total_usage'] ?? 0) - ($stats['precpu_stats']['cpu_usage']['total_usage'] ?? 0);
-                $system_cpu_delta = ($stats['cpu_stats']['system_cpu_usage'] ?? 0) - ($stats['precpu_stats']['system_cpu_usage'] ?? 0);
-                $number_cpus = $stats['cpu_stats']['online_cpus'] ?? count($stats['cpu_stats']['cpu_usage']['percpu_usage'] ?? []);
+                // Sum CPU delta
+                $total_container_cpu_delta += ($stats['cpu_stats']['cpu_usage']['total_usage'] ?? 0) - ($stats['precpu_stats']['cpu_usage']['total_usage'] ?? 0);
                 
-                if ($system_cpu_delta > 0 && $cpu_delta > 0 && $number_cpus > 0) {
-                    $total_cpu_usage += ($cpu_delta / $system_cpu_delta) * $number_cpus * 100.0;
+                // Get system CPU delta only once from the first running container
+                if (!$first_stats_collected) {
+                    $system_cpu_delta = ($stats['cpu_stats']['system_cpu_usage'] ?? 0) - ($stats['precpu_stats']['system_cpu_usage'] ?? 0);
+                    $first_stats_collected = true;
                 }
             }
 
-            if ($running_container_count > 0) {
-                $stmt_insert->bind_param("iddd", $host['id'], $total_cpu_usage, $total_mem_usage, $total_mem_limit);
+            $final_cpu_usage_percent = 0.0;
+            if ($system_cpu_delta > 0 && $total_container_cpu_delta >= 0) {
+                $final_cpu_usage_percent = ($total_container_cpu_delta / $system_cpu_delta) * $host_total_cpus * 100.0;
+            }
+
+            // Only save stats if there are running containers and we could determine host memory
+            if ($running_container_count > 0 && $host_total_memory > 0) {
+                $stmt_insert->bind_param("iddd", $host['id'], $final_cpu_usage_percent, $total_mem_usage_bytes, $host_total_memory);
                 $stmt_insert->execute();
-                echo "  -> Stats saved for host {$host['name']}. CPU: {$total_cpu_usage}%, Mem: {$total_mem_usage}\n";
+                echo "  -> Stats saved for host {$host['name']}. CPU: {$final_cpu_usage_percent}%, Mem: {$total_mem_usage_bytes}\n";
             }
         } catch (Exception $e) {
             echo "  -> ERROR processing host {$host['name']}: " . $e->getMessage() . "\n";

@@ -43,6 +43,8 @@ require_once __DIR__ . '/../includes/host_nav.php';
                         <th>ID</th>
                         <th>Driver</th>
                         <th>Scope</th>
+                        <th>Subnet / Gateway</th>
+                        <th>Connected Containers</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -64,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalBtnContent = refreshNetworksBtn.innerHTML;
         refreshNetworksBtn.disabled = true;
         refreshNetworksBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing...`;
-        networksContainer.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
+        networksContainer.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         fetch(`${basePath}/api/hosts/${hostId}/networks`)
             .then(response => response.json())
@@ -79,23 +81,42 @@ document.addEventListener('DOMContentLoaded', function() {
                         const driver = net.Driver;
                         const scope = net.Scope;
                         const isDefaultNetwork = ['bridge', 'host', 'none'].includes(name);
+                        
+                        let ipamHtml = '<span class="text-muted small">N/A</span>';
+                        if (net.IPAM && net.IPAM.Config && net.IPAM.Config.length > 0) {
+                            const ipamConfig = net.IPAM.Config[0];
+                            const subnet = ipamConfig.Subnet ? `<code>${ipamConfig.Subnet}</code>` : '';
+                            const gateway = ipamConfig.Gateway ? `<br><small class="text-muted">${ipamConfig.Gateway}</small>` : '';
+                            if (subnet) {
+                                ipamHtml = subnet + gateway;
+                            }
+                        }
+
+                        let containersHtml = '<span class="text-muted small">None</span>';
+                        if (net.Containers && Object.keys(net.Containers).length > 0) {
+                            containersHtml = Object.values(net.Containers).map(c => 
+                                `<span class="badge bg-primary me-1">${c.Name}</span>`
+                            ).join(' ');
+                        }
 
                         html += `<tr>
                                     <td>${name}</td>
                                     <td><code>${id}</code></td>
                                     <td><span class="badge bg-info">${driver}</span></td>
                                     <td>${scope}</td>
+                                    <td>${ipamHtml}</td>
+                                    <td>${containersHtml}</td>
                                     <td class="text-end">
                                         <button class="btn btn-sm btn-outline-danger delete-network-btn" data-network-id="${net.Id}" data-network-name="${name}" ${isDefaultNetwork ? 'disabled title="Default networks cannot be removed."' : ''}><i class="bi bi-trash"></i></button>
                                     </td>
                                  </tr>`;
                     });
                 } else {
-                    html = '<tr><td colspan="5" class="text-center">No custom networks found on this host.</td></tr>';
+                    html = '<tr><td colspan="7" class="text-center">No custom networks found on this host.</td></tr>';
                 }
                 networksContainer.innerHTML = html;
             })
-            .catch(error => networksContainer.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Failed to load networks: ${error.message}</td></tr>`)
+            .catch(error => networksContainer.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load networks: ${error.message}</td></tr>`)
             .finally(() => {
                 refreshNetworksBtn.disabled = false;
                 refreshNetworksBtn.innerHTML = originalBtnContent;
