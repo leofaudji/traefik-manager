@@ -7,7 +7,7 @@ services:
     ports:
       - "8080"
     volumes:
-      - ./compose-files:/var/www/html/compose-files
+      - compose-files:/var/www/html/compose-files
     environment:
       DB_SERVER: db
       DB_NAME: traefik_manager
