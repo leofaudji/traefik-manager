@@ -35,12 +35,12 @@ services:
     environment:
       # Variabel ini akan di-override oleh file .env Anda saat aplikasi berjalan.
       # Pastikan nilainya sesuai dengan service database di bawah.
-      - DB_SERVER=db
-      - DB_NAME=traefik_manager
-      - DB_USERNAME=tm_user
-      - DB_PASSWORD=tm_password
+      DB_SERVER: db
+      DB_NAME: traefik_manager
+      DB_USERNAME: tm_user
+      DB_PASSWORD: tm_password
       # Pastikan path ini sesuai dengan volume mount #3 di atas.
-      - YAML_OUTPUT_PATH=/var/www/html/traefik-configs/dynamic.yml
+      YAML_OUTPUT_PATH: /var/www/html/traefik-configs/dynamic.yml
     depends_on:
       - db
     networks:
