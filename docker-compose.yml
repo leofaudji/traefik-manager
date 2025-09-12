@@ -5,7 +5,7 @@ services:
     container_name: traefik-manager
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8080"
     volumes:
       - ./compose-files:/var/www/html/compose-files
     environment:

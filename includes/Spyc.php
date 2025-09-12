@@ -391,11 +391,14 @@ class Spyc {
       // Use literal block for multi-line strings
       $value_indent = $indent + $this->_dumpIndent;
       $value = "|-\n" . str_repeat(' ', $value_indent) . $this->LiteralPlaceHolder . str_replace("\n", "\n" . str_repeat(' ', $value_indent), $value);
-    } elseif (is_string($value) && ((strpos($value, ": ") !== false || strpos($value, "- ") !== false ||
+    } elseif (($key === 'version' && !is_array($value) && $value !== null) || // Force 'version' to be a string.
+        (is_string($value) && ((strpos($value, ":") !== false || strpos($value, "- ") !== false || // Quote strings with colons (ports, volumes) or starting with a dash.
         strpos($value, "*") !== false || strpos($value, "#") !== false || strpos($value, "<") !== false || strpos($value, ">") !== false || strpos($value, "!") !== false ||
-        strpos($value, "[") !== false || strpos($value, "]") !== false || strpos($value, "{") !== false || strpos($value, "}") !== false) || substr($value, -1, 1) == ':')) {
-      // For single-line strings with special characters, quote them to avoid them being parsed as syntax.
-      $value = '"' . str_replace('"', '\"', $value) . '"';
+        strpos($value, "[") !== false || strpos($value, "]") !== false || strpos($value, "{") !== false || strpos($value, "}") !== false) || substr($value, -1, 1) == ':')))
+    {
+      // For single-line strings with special characters, or for the 'version' key, quote the value
+      // to ensure it's treated as a string by docker-compose.
+      $value = '"' . str_replace('"', '\"', (string)$value) . '"';
     }
 
     $spaces = str_repeat(' ', $indent);
