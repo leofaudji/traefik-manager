@@ -109,6 +109,17 @@ class DockerClient
     }
 
     /**
+     * Removes an image.
+     * @param string $imageIdOrName The ID or name of the image.
+     * @return bool True on success.
+     * @throws Exception
+     */
+    public function removeImage(string $imageIdOrName): bool
+    {
+        return $this->request("/images/{$imageIdOrName}", 'DELETE');
+    }
+
+    /**
      * Lists all stacks (Swarm).
      * @return array The list of stacks.
      * @throws Exception

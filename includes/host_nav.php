@@ -27,6 +27,9 @@ $host_id = $host['id'] ?? 0;
         <a class="nav-link <?= ($active_page === 'networks') ? 'active' : '' ?>" href="<?= base_url('/hosts/' . $host_id . '/networks') ?>">Networks</a>
     </li>
     <li class="nav-item">
+        <a class="nav-link <?= ($active_page === 'images') ? 'active' : '' ?>" href="<?= base_url('/hosts/' . $host_id . '/images') ?>">Images</a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= ($active_page === 'edit') ? 'active' : '' ?>" href="<?= base_url('/hosts/' . $host_id . '/edit') ?>">Settings</a>
     </li>
 </ul>

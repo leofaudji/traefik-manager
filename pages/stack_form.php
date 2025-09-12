@@ -2,31 +2,6 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 $conn = Database::getInstance()->getConnection();
 require_once __DIR__ . '/../includes/Spyc.php';
-require_once __DIR__ . '/../includes/DockerClient.php';
-
-$host_id_check = $_GET['id'] ?? null;
-
-// --- NEW: Check if host is a swarm manager before allowing access to this page ---
-if ($host_id_check) {
-    $stmt_host = $conn->prepare("SELECT * FROM docker_hosts WHERE id = ?");
-    $stmt_host->bind_param("i", $host_id_check);
-    $stmt_host->execute();
-    $host_result = $stmt_host->get_result();
-    if ($host_data = $host_result->fetch_assoc()) {
-        try {
-            $dockerClient = new DockerClient($host_data);
-            $dockerInfo = $dockerClient->getInfo();
-            if (!isset($dockerInfo['Swarm']['ControlAvailable']) || $dockerInfo['Swarm']['ControlAvailable'] !== true) {
-                header("Location: " . base_url('/hosts/' . $host_id_check . '/stacks?status=error&message=Stack deployment is only supported on Docker Swarm managers.'));
-                exit;
-            }
-        } catch (Exception $e) {
-            header("Location: " . base_url('/hosts/' . $host_id_check . '/stacks?status=error&message=Could not verify host status: ' . urlencode($e->getMessage())));
-            exit;
-        }
-    }
-    $stmt_host->close();
-}
 
 $is_edit = false;
 $stack = [
@@ -36,12 +11,29 @@ $stack = [
 
 $host_id = $_GET['id'] ?? null;
 
+// Get host name for the header
+$stmt = $conn->prepare("SELECT name FROM docker_hosts WHERE id = ?");
+$stmt->bind_param("i", $host_id);
+$stmt->execute();
+$host_result = $stmt->get_result();
+if (!($host = $host_result->fetch_assoc())) {
+    header("Location: " . base_url('/hosts?status=error&message=Host not found.'));
+    exit;
+}
+$stmt->close();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
-<h3><?= $is_edit ? 'Edit' : 'Create' ?> Application Stack</h3>
-<p class="text-muted">Define your application using the form below. This will generate a `docker-compose.yml` file for deployment.</p>
-<hr>
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div>
+        <h1 class="h2"><?= $is_edit ? 'Edit' : 'Create' ?> Application Stack</h1>
+        <p class="text-muted mb-0">For host: <a href="<?= base_url('/hosts/' . $host_id . '/details') ?>"><?= htmlspecialchars($host['name']) ?></a></p>
+    </div>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="<?= base_url('/hosts/' . $host_id . '/stacks') ?>" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Stacks</a>
+    </div>
+</div>
 
 <div class="card">
     <div class="card-body">
@@ -194,6 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const networksContainer = document.getElementById('networks-container');
     const addNetworkBtn = document.getElementById('add-network-btn');
     const hostId = <?= $host_id ?>;
+    let isSwarmManager = false;
     let availableNetworks = [];
 
     // Fetch available networks on page load to populate dropdowns
@@ -207,6 +200,23 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => {
             console.error("Failed to fetch host networks:", error);
             showToast("Could not load available networks for the host.", false);
+        });
+
+    // Check if host is a swarm manager to adapt the form's action
+    const submitButton = document.getElementById('save-stack-btn');
+    fetch(`${basePath}/api/hosts/${hostId}/stats`)
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success' && result.data.is_swarm_manager) {
+                isSwarmManager = true;
+                submitButton.textContent = 'Deploy Stack';
+            } else {
+                isSwarmManager = false;
+                submitButton.textContent = 'Generate Compose File';
+            }
+        }).catch(err => {
+            console.error("Could not determine host type, defaulting to file generation.", err);
+            submitButton.textContent = 'Generate Compose File';
         });
 
     let serviceIndex = 0;
@@ -354,33 +364,121 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    function buildComposeObject() {
+        const compose = { version: '3.8', services: {}, networks: {} };
+        
+        document.querySelectorAll('.service-block').forEach((serviceBlock) => {
+            const serviceNameInput = serviceBlock.querySelector('input[name$="[name]"]');
+            if (!serviceNameInput || !serviceNameInput.value) return;
+            const serviceName = serviceNameInput.value;
+
+            const serviceData = {};
+            serviceData.image = serviceBlock.querySelector('input[name$="[image]"]').value || 'alpine:latest';
+            
+            const replicas = serviceBlock.querySelector('input[name$="[deploy][replicas]"]').value;
+            const cpus = serviceBlock.querySelector('input[name$="[deploy][resources][limits][cpus]"]').value;
+            const memory = serviceBlock.querySelector('input[name$="[deploy][resources][limits][memory]"]').value;
+            if (replicas || cpus || memory) {
+                serviceData.deploy = {};
+                if (replicas) serviceData.deploy.replicas = parseInt(replicas);
+                if (cpus || memory) {
+                    serviceData.deploy.resources = { limits: {} };
+                    if (cpus) serviceData.deploy.resources.limits.cpus = cpus;
+                    if (memory) serviceData.deploy.resources.limits.memory = memory;
+                }
+            }
+
+            ['ports', 'environment', 'volumes', 'depends_on'].forEach(key => {
+                const containerClass = key.replace('_', '-') + '-container';
+                const inputs = serviceBlock.querySelectorAll(`.${containerClass} input`);
+                if (inputs.length > 0) {
+                    const values = Array.from(inputs).map(input => input.value).filter(Boolean);
+                    if (values.length > 0) serviceData[key] = values;
+                }
+            });
+
+            const networkSelects = serviceBlock.querySelectorAll('.service-networks-container select');
+            if (networkSelects.length > 0) {
+                const values = Array.from(networkSelects).map(select => select.value).filter(Boolean);
+                if (values.length > 0) serviceData.networks = values;
+            }
+
+            compose.services[serviceName] = serviceData;
+        });
+
+        document.querySelectorAll('#networks-container .input-group').forEach(networkBlock => {
+            const networkName = networkBlock.querySelector('input[name^="networks["]').value;
+            if (networkName) {
+                compose.networks[networkName] = {}; // Define as external network
+            }
+        });
+
+        return compose;
+    }
+
+    function generateAndDownloadCompose() {
+        const submitButton = document.getElementById('save-stack-btn');
+        const originalButtonText = submitButton.innerHTML;
+        submitButton.disabled = true;
+        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...`;
+
+        try {
+            const composeObject = buildComposeObject();
+            const stackName = document.getElementById('stack-name').value || 'stack';
+            const yamlString = jsyaml.dump(composeObject, { indent: 2 });
+
+            const blob = new Blob([yamlString], { type: 'application/x-yaml' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${stackName}-compose.yml`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+
+            showToast('Compose file generated successfully. You can now run it on your host.', true);
+        } catch (error) {
+            console.error("Error generating YAML:", error);
+            showToast('Failed to generate YAML file. Check console for details.', false);
+        } finally {
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalButtonText;
+        }
+    }
+
     // --- Form Submission ---
     const stackForm = document.getElementById('stack-builder-form');
     stackForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const formData = new FormData(stackForm);
-        const url = stackForm.action;
-        const submitButton = document.getElementById('save-stack-btn');
-        const originalButtonText = submitButton.innerHTML;
 
-        submitButton.disabled = true;
-        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
+        if (isSwarmManager) {
+            const formData = new FormData(stackForm);
+            const url = stackForm.action;
+            const submitButton = document.getElementById('save-stack-btn');
+            const originalButtonText = submitButton.innerHTML;
 
-        fetch(url, { method: 'POST', body: formData })
-            .then(response => response.json().then(data => ({ ok: response.ok, data })))
-            .then(({ ok, data }) => {
-                if (ok) {
-                    showToast(data.message, true);
-                    setTimeout(() => { window.location.href = stackForm.dataset.redirect; }, 1500);
-                } else {
-                    throw new Error(data.message || 'An unknown error occurred.');
-                }
-            })
-            .catch(error => {
-                showToast(error.message, false);
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
-            });
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Deploying...`;
+
+            fetch(url, { method: 'POST', body: formData })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok) {
+                        showToast(data.message, true);
+                        setTimeout(() => { window.location.href = stackForm.dataset.redirect; }, 1500);
+                    } else {
+                        throw new Error(data.message || 'An unknown error occurred.');
+                    }
+                })
+                .catch(error => {
+                    showToast(error.message, false);
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                });
+        } else {
+            // For non-swarm managers, generate and download the file
+            generateAndDownloadCompose();
+        }
     });
 
 });

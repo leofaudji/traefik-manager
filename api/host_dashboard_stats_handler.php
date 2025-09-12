@@ -78,12 +78,50 @@ try {
         $total_stacks = 0; // Fallback for the widget
     }
 
+    // Get image stats
+    $total_images = 0;
+    try {
+        // This logic is duplicated from network_handler.php for simplicity, as we can't easily share it.
+        $url = $host['docker_api_url'];
+        $is_socket = strpos($url, 'unix://') === 0;
+        $ch = curl_init();
+        if ($is_socket) {
+            curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, substr($url, 7));
+            curl_setopt($ch, CURLOPT_URL, 'http://localhost/images/json');
+        } else {
+            $curl_url = ($host['tls_enabled'] ? 'https://' : 'http://') . str_replace('tcp://', '', $url);
+            curl_setopt($ch, CURLOPT_URL, rtrim($curl_url, '/') . '/images/json');
+        }
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        if (!empty($host['tls_enabled'])) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+            if (!empty($host['ca_cert_path']) && file_exists($host['ca_cert_path'])) curl_setopt($ch, CURLOPT_CAINFO, $host['ca_cert_path']);
+            if (!empty($host['client_cert_path']) && file_exists($host['client_cert_path'])) curl_setopt($ch, CURLOPT_SSLCERT, $host['client_cert_path']);
+            if (!empty($host['client_key_path']) && file_exists($host['client_key_path'])) curl_setopt($ch, CURLOPT_SSLKEY, $host['client_key_path']);
+        }
+        $response = curl_exec($ch);
+        curl_close($ch);
+        $images_data = json_decode($response, true);
+        if (is_array($images_data)) {
+            $filtered_images = array_filter($images_data, function($image) {
+                return !(empty($image['RepoTags']) || $image['RepoTags'][0] === '<none>:<none>');
+            });
+            $total_images = count($filtered_images);
+        }
+    } catch (Exception $e) {
+        error_log("Could not get Image stats for host {$host['name']}: " . $e->getMessage());
+        $total_images = 'N/A';
+    }
+
     $stats = [
         'total_containers' => $total_containers,
         'running_containers' => $running_containers,
         'stopped_containers' => $stopped_containers,
         'total_networks' => $total_networks,
         'total_stacks' => $total_stacks,
+        'total_images' => $total_images,
         'is_swarm_manager' => $is_swarm_manager,
     ];
 

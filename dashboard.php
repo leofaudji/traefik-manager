@@ -183,8 +183,8 @@ require_once 'includes/header.php';
                         <th>Host</th>
                         <th>Status</th>
                         <th>Containers</th>
-                        <th>CPU</th>
-                        <th>Memory</th>
+                        <th>CPU Usage</th>
+                        <th>Memory Usage</th>
                         <th>Docker Version</th>
                         <th>OS</th>
                         <th class="text-end">Actions</th>

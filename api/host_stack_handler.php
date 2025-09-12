@@ -14,7 +14,7 @@ if ($basePath && strpos($request_uri_path, $basePath) === 0) {
 $conn = Database::getInstance()->getConnection();
 
 try {
-    if (!preg_match('/^\/api\/hosts\/(\d+)\/stacks/', $request_uri_path, $matches)) {
+    if (!preg_match('/^\/api\/hosts\/(\d+)\//', $request_uri_path, $matches)) {
         throw new InvalidArgumentException("Invalid API endpoint format.");
     }
     $host_id = $matches[1];

@@ -83,6 +83,9 @@ CREATE TABLE `docker_hosts` (
   `ca_cert_path` varchar(255) DEFAULT NULL,
   `client_cert_path` varchar(255) DEFAULT NULL,
   `client_key_path` varchar(255) DEFAULT NULL,
+  `default_volume_path` varchar(255) DEFAULT NULL COMMENT 'Base path for application volumes on this host',
+  `default_compose_path` varchar(255) DEFAULT NULL,
+  `default_git_compose_path` varchar(255) DEFAULT NULL COMMENT 'Default path to compose file inside a git repo',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -280,11 +283,17 @@ INSERT INTO `routers` (`name`, `rule`, `entry_points`, `service_name`) VALUES ('
 INSERT INTO `servers` (`service_id`, `url`) VALUES (@svc_id, 'http://10.10.10.10:80');
 
 -- New Default Data
-INSERT INTO `docker_hosts` (`id`, `name`, `docker_api_url`, `description`, `tls_enabled`) VALUES (1, 'PC-Faudji', 'tcp://10.2.2.2:2375', 'Local Docker socket managed by the application server.', 0);
-INSERT INTO `docker_hosts` (`id`, `name`, `docker_api_url`, `description`, `tls_enabled`) VALUES (2, 'PC-Rizal', 'tcp://10.2.2.22:2375', 'Local Docker socket managed by the application server.', 0);
+INSERT INTO `docker_hosts` (`id`, `name`, `docker_api_url`, `description`, `tls_enabled`, `default_volume_path`) VALUES (1, 'PC-Faudji', 'tcp://10.2.2.2:2375', 'Local Docker socket managed by the application server.', 0, '/opt/stacks');
+INSERT INTO `docker_hosts` (`id`, `name`, `docker_api_url`, `description`, `tls_enabled`, `default_volume_path`) VALUES (2, 'PC-Rizal', 'tcp://10.2.2.22:2375', 'Local Docker socket managed by the application server.', 0, '/opt/stacks');
 
 INSERT INTO `transports` (`name`, `insecure_skip_verify`) VALUES ('dsm-transport', 1);
+
+ALTER TABLE `docker_hosts` ADD `default_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_volume_path`;
+ALTER TABLE `docker_hosts` ADD `default_git_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_compose_path`;
+
 ";
+
+
 
 // --- Execution Logic ---
 $conn_setup = new mysqli($db_server, $db_username, $db_password);

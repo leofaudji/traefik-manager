@@ -221,6 +221,41 @@ document.addEventListener('DOMContentLoaded', function () {
         const viewHistoryBtn = e.target.closest('.view-history-btn');
         const copyButton = e.target.closest('.copy-btn');
         const testConnectionBtn = e.target.closest('.test-connection-btn');
+        const testGitConnectionBtn = e.target.closest('#test-git-connection-btn');
+
+        if (testGitConnectionBtn) {
+            e.preventDefault();
+            const gitUrlInput = document.getElementById('git_url');
+            if (!gitUrlInput || !gitUrlInput.value) {
+                showToast('Please enter a Git URL first.', false);
+                return;
+            }
+
+            const gitUrl = gitUrlInput.value;
+            const originalBtnText = testGitConnectionBtn.innerHTML;
+            testGitConnectionBtn.disabled = true;
+            testGitConnectionBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Testing...`;
+
+            const formData = new FormData();
+            formData.append('git_url', gitUrl);
+
+            fetch(`${basePath}/api/git/test`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                showToast(data.message, ok);
+            })
+            .catch(error => {
+                showToast(error.message || 'An unknown network error occurred.', false);
+            })
+            .finally(() => {
+                testGitConnectionBtn.disabled = false;
+                testGitConnectionBtn.innerHTML = originalBtnText;
+            });
+            return;
+        }
 
         if (copyButton) {
             e.preventDefault();
@@ -580,18 +615,33 @@ document.addEventListener('DOMContentLoaded', function () {
                                     : `<span class="badge bg-danger">Unreachable</span>`;
                                 
                                 const containers = host.status === 'Reachable' ? `${host.running_containers} / ${host.total_containers}` : 'N/A';
-                                const cpus = host.cpus !== 'N/A' ? host.cpus : 'N/A';
-                                const memory = host.memory !== 'N/A' ? formatBytes(host.memory) : 'N/A';
                                 const dockerVersion = host.docker_version !== 'N/A' ? `<span class="badge bg-info">${host.docker_version}</span>` : 'N/A';
                                 const os = host.os !== 'N/A' ? host.os : 'N/A';
+
+                                const cpuUsagePercent = host.cpu_usage_percent !== 'N/A' ? host.cpu_usage_percent : 0;
+                                const memoryUsagePercent = host.memory_usage_percent !== 'N/A' ? host.memory_usage_percent : 0;
+
+                                const cpuUsageHtml = host.status === 'Reachable' ? `
+                                    <div class="progress" role="progressbar" aria-label="CPU usage" aria-valuenow="${cpuUsagePercent}" aria-valuemin="0" aria-valuemax="100" style="height: 20px;">
+                                        <div class="progress-bar" style="width: ${cpuUsagePercent}%">${cpuUsagePercent}%</div>
+                                    </div>
+                                    <small class="text-muted">${host.cpus} vCPUs</small>
+                                ` : 'N/A';
+
+                                const memoryUsageHtml = host.status === 'Reachable' ? `
+                                    <div class="progress" role="progressbar" aria-label="Memory usage" aria-valuenow="${memoryUsagePercent}" aria-valuemin="0" aria-valuemax="100" style="height: 20px;">
+                                        <div class="progress-bar bg-warning" style="width: ${memoryUsagePercent}%">${memoryUsagePercent}%</div>
+                                    </div>
+                                    <small class="text-muted">${formatBytes(host.memory)}</small>
+                                ` : 'N/A';
 
                                 html += `
                                     <tr>
                                         <td><a href="${basePath}/hosts/${host.id}/details">${host.name}</a></td>
                                         <td>${statusBadge}</td>
                                         <td>${containers}</td>
-                                        <td>${cpus}</td>
-                                        <td>${memory}</td>
+                                        <td>${cpuUsageHtml}</td>
+                                        <td>${memoryUsageHtml}</td>
                                         <td>${dockerVersion}</td>
                                         <td>${os}</td>
                                         <td class="text-end">

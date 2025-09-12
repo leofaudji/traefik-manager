@@ -11,7 +11,9 @@ $host = [
     'tls_enabled' => 0,
     'ca_cert_path' => '',
     'client_cert_path' => '',
-    'client_key_path' => ''
+    'client_key_path' => '',
+    'default_volume_path' => '/opt/stacks',
+    'default_compose_path' => ''
 ];
 
 if (isset($_GET['id'])) {
@@ -54,6 +56,24 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="mb-3">
                 <label for="host-description" class="form-label">Description</label>
                 <input type="text" class="form-control" id="host-description" name="description" value="<?= htmlspecialchars($host['description']) ?>">
+            </div>
+
+            <div class="mb-3">
+                <label for="default_volume_path" class="form-label">Default Volume Path</label>
+                <input type="text" class="form-control" id="default_volume_path" name="default_volume_path" value="<?= htmlspecialchars($host['default_volume_path']) ?>" placeholder="/opt/stacks">
+                <small class="form-text text-muted">Base path on the host where application data volumes will be created (e.g., `/opt/stacks`).</small>
+            </div>
+
+            <div class="mb-3">
+                <label for="default_compose_path" class="form-label">Default Compose File Path</label>
+                <input type="text" class="form-control" id="default_compose_path" name="default_compose_path" value="<?= htmlspecialchars($host['default_compose_path'] ?? '') ?>" placeholder="/var/www/html/traefik-manager/compose-files">
+                <small class="form-text text-muted">Base path on this application server to store generated docker-compose files for this host's standalone deployments. Leave blank to use temporary directories.</small>
+            </div>
+
+            <div class="mb-3">
+                <label for="default_git_compose_path" class="form-label">Default Git Compose Path</label>
+                <input type="text" class="form-control" id="default_git_compose_path" name="default_git_compose_path" value="<?= htmlspecialchars($host['default_git_compose_path'] ?? '') ?>" placeholder="docker-compose.yml">
+                <small class="form-text text-muted">Default path to the compose file within a Git repository for this host (e.g., `deploy/docker-compose.yml`).</small>
             </div>
 
             <hr>

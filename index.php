@@ -44,6 +44,7 @@ $router->get('/services', 'pages/service_management.php', ['auth', 'admin']);
 $router->get('/settings', 'pages/settings.php', ['auth', 'admin']);
 $router->get('/health-check', 'pages/health_check.php', ['auth', 'admin']);
 $router->get('/templates', 'pages/template_management.php', ['auth', 'admin']);
+$router->get('/app-launcher', 'pages/app_launcher.php', ['auth', 'admin']);
 $router->get('/hosts', 'pages/host_management.php', ['auth', 'admin']);
 
 // Rute untuk form edit
@@ -61,7 +62,10 @@ $router->get('/hosts/{id}/details', 'pages/host_dashboard.php', ['auth', 'admin'
 $router->get('/hosts/{id}/containers', 'pages/host_containers.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/stacks', 'pages/host_stacks.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/stacks/new', 'pages/stack_form.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/deploy/git', 'pages/host_deploy_git.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/deploy/git', 'pages/host_deploy_git.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/networks', 'pages/host_networks.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/images', 'pages/host_images.php', ['auth', 'admin']);
 
 // --- API & Action Routes (untuk form submissions dan AJAX) ---
 
@@ -76,9 +80,15 @@ $router->get('/api/hosts/{id}/containers', 'api/host_detail_handler.php', ['auth
 $router->get('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{host_id}/stacks/{stack_name}/spec', 'api/host_stack_handler.php', ['auth', 'admin']);
+$router->post('/api/git/test', 'api/git_test_handler.php', ['auth', 'admin']);
+$router->post('/api/git/test-compose-path', 'api/git_compose_test_handler.php', ['auth', 'admin']);
+$router->post('/api/app-launcher/deploy', 'api/app_launcher_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/chart-data', 'api/host_dashboard_chart_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/stats', 'api/host_dashboard_stats_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/networks', 'api/network_handler.php', ['auth', 'admin']);
+$router->get('/api/hosts/{id}/images', 'api/network_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/networks', 'api/network_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/containers/{container_id}/logs', 'api/container_log_handler.php', ['auth', 'admin']);
 $router->post('/api/history/cleanup', 'api/cleanup_handler.php', ['auth', 'admin']);

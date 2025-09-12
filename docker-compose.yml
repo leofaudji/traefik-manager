@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Service untuk aplikasi Traefik Manager (PHP)
+  traefik-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: traefik-manager
+    restart: unless-stopped
+    ports:
+      # Terbitkan port 80 dari container ke port 8080 di host Anda.
+      # Anda bisa mengakses aplikasi melalui http://localhost:8080
+      - "8080:80"
+    volumes:
+      # 1. Mount Docker socket dari host ke container.
+      # Ini WAJIB agar aplikasi bisa menjalankan perintah `docker-compose`
+      # untuk men-deploy ke host standalone.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # 2. Mount direktori untuk menyimpan file compose yang persisten.
+      # Path di dalam container (/var/www/html/compose-files) harus sesuai
+      # dengan yang Anda atur di "Default Compose File Path" pada Settings.
+      - ./compose-files:/var/www/html/compose-files
+
+      # 3. Mount direktori untuk menyimpan file dynamic.yml dari Traefik.
+      # Path di dalam container (/var/www/html/traefik-configs/dynamic.yml) harus sesuai
+      # dengan `YAML_OUTPUT_PATH` di file .env Anda.
+      - ./traefik-configs:/var/www/html/traefik-configs
+
+      # 4. (Opsional) Mount kunci SSH Anda untuk kloning repo privat.
+      # Path di dalam container (/etc/ssh/id_rsa) harus sesuai dengan
+      # yang Anda atur di "Git SSH Key Path" pada Settings.
+      - ~/.ssh/id_rsa:/etc/ssh/id_rsa:ro
+    environment:
+      # Variabel ini akan di-override oleh file .env Anda saat aplikasi berjalan.
+      # Pastikan nilainya sesuai dengan service database di bawah.
+      - DB_SERVER=db
+      - DB_NAME=traefik_manager
+      - DB_USERNAME=tm_user
+      - DB_PASSWORD=tm_password
+      # Pastikan path ini sesuai dengan volume mount #3 di atas.
+      - YAML_OUTPUT_PATH=/var/w ww/html/traefik-configs/dynamic.yml
+    depends_on:
+      - db
+    networks:
+      - traefik-manager-net
+
+  # Service untuk database MySQL
+  db:
+    image: mysql:8.0
+    container_name: traefik-manager-db
+    restart: unless-stopped
+    environment:
+      # Gunakan kredensial yang sama dengan service aplikasi.
+      MYSQL_DATABASE: traefik_manager
+      MYSQL_USER: tm_user
+      MYSQL_PASSWORD: tm_password
+      MYSQL_ROOT_PASSWORD: root_password_change_me # Ganti ini dengan password yang aman
+    volumes:
+      # Membuat data database persisten.
+      - db_data:/var/lib/mysql
+    networks:
+      - traefik-manager-net
+
+networks:
+  traefik-manager-net:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local

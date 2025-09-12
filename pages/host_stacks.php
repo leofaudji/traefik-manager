@@ -28,7 +28,10 @@ require_once __DIR__ . '/../includes/host_nav.php';
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-stack"></i> Application Stacks</h5>
         <div id="stack-actions-container">
-            <a href="<?= base_url('/hosts/' . $id . '/stacks/new') ?>" class="btn btn-sm btn-outline-primary" style="display: none;" id="add-stack-btn">
+            <a href="<?= base_url('/hosts/' . $id . '/deploy/git') ?>" class="btn btn-sm btn-outline-info" id="deploy-git-btn">
+                <i class="bi bi-github"></i> Deploy from Git
+            </a>
+            <a href="<?= base_url('/hosts/' . $id . '/stacks/new') ?>" class="btn btn-sm btn-outline-primary ms-2" id="add-stack-btn">
                 <i class="bi bi-plus-circle"></i> Add New Stack
             </a>
         </div>
@@ -134,26 +137,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function checkSwarmStatusAndLoad() {
-        const addStackBtn = document.getElementById('add-stack-btn');
-        const stackActionsContainer = document.getElementById('stack-actions-container');
-
         fetch(`${basePath}/api/hosts/${hostId}/stats`)
             .then(response => response.json())
             .then(result => {
-                if (result.status === 'success' && result.data.is_swarm_manager) {
-                    isSwarmManager = true;
-                    addStackBtn.style.display = 'inline-block';
-                } else {
-                    isSwarmManager = false;
-                    addStackBtn.style.display = 'none';
-                    if (!document.getElementById('non-swarm-msg')) {
-                        const msg = document.createElement('small');
-                        msg.id = 'non-swarm-msg';
-                        msg.className = 'text-muted';
-                        msg.textContent = 'Stack deployment is only available on Swarm managers.';
-                        stackActionsContainer.appendChild(msg);
-                    }
-                }
+                isSwarmManager = result.status === 'success' && result.data.is_swarm_manager;
             })
             .catch(err => console.error("Could not get swarm status", err))
             .finally(() => {

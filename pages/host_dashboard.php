@@ -26,7 +26,7 @@ require_once __DIR__ . '/../includes/host_nav.php';
 
 <!-- Summary Widgets -->
 <div class="row mb-4">
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-4 col-md-6 mb-3">
         <a href="<?= base_url('/hosts/' . $id . '/containers') ?>" class="text-decoration-none">
             <div class="card text-white bg-primary h-100">
                 <div class="card-body">
@@ -41,7 +41,7 @@ require_once __DIR__ . '/../includes/host_nav.php';
             </div>
         </a>
     </div>
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-4 col-md-6 mb-3">
         <a href="<?= base_url('/hosts/' . $id . '/containers') ?>" class="text-decoration-none">
             <div class="card text-white bg-success h-100">
                 <div class="card-body">
@@ -56,7 +56,22 @@ require_once __DIR__ . '/../includes/host_nav.php';
             </div>
         </a>
     </div>
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-4 col-md-6 mb-3">
+        <a href="<?= base_url('/hosts/' . $id . '/containers') ?>" class="text-decoration-none">
+            <div class="card text-white bg-danger h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="card-title mb-0" id="stopped-containers-widget">...</h3>
+                            <p class="card-text mb-0">Stopped</p>
+                        </div>
+                        <i class="bi bi-stop-circle fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-lg-4 col-md-6 mb-3">
         <a href="<?= base_url('/hosts/' . $id . '/stacks') ?>" class="text-decoration-none">
             <div class="card text-white bg-info h-100">
                 <div class="card-body">
@@ -71,7 +86,7 @@ require_once __DIR__ . '/../includes/host_nav.php';
             </div>
         </a>
     </div>
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-4 col-md-6 mb-3">
         <a href="<?= base_url('/hosts/' . $id . '/networks') ?>" class="text-decoration-none">
             <div class="card text-white bg-secondary h-100">
                 <div class="card-body">
@@ -81,6 +96,21 @@ require_once __DIR__ . '/../includes/host_nav.php';
                             <p class="card-text mb-0">Networks</p>
                         </div>
                         <i class="bi bi-diagram-3 fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-lg-4 col-md-6 mb-3">
+        <a href="<?= base_url('/hosts/' . $id . '/images') ?>" class="text-decoration-none">
+            <div class="card text-white bg-dark h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="card-title mb-0" id="total-images-widget">...</h3>
+                            <p class="card-text mb-0">Images</p>
+                        </div>
+                        <i class="bi bi-box-seam fs-1 opacity-50"></i>
                     </div>
                 </div>
             </div>
@@ -152,8 +182,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = result.data;
                 document.getElementById('total-containers-widget').textContent = data.total_containers;
                 document.getElementById('running-containers-widget').textContent = data.running_containers;
+                document.getElementById('stopped-containers-widget').textContent = data.stopped_containers;
                 document.getElementById('total-stacks-widget').textContent = data.total_stacks;
                 document.getElementById('total-networks-widget').textContent = data.total_networks;
+                document.getElementById('total-images-widget').textContent = data.total_images;
             }
         })
         .catch(error => console.error('Error fetching host dashboard stats:', error));

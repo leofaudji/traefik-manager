@@ -102,6 +102,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="mb-3">
                             <label for="git_ssh_key_path" class="form-label">Absolute Path to SSH Private Key</label>
                             <input type="text" class="form-control" id="git_ssh_key_path" name="git_ssh_key_path" value="<?= htmlspecialchars($settings['git_ssh_key_path'] ?? '/var/www/.ssh/id_rsa') ?>">
+                            <small class="form-text text-muted">Required for cloning repositories using SSH URLs (e.g., `git@...`).</small>
                         </div>
                     </div>
                     <div class="col-md-6">
