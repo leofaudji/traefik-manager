@@ -1,18 +1,13 @@
 version: '3.8'
 services:
   traefik-manager:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: traefik-manager-app # Memberi nama eksplisit pada image
+    image: php8.3-fpm:latest
     container_name: traefik-manager
     restart: unless-stopped
     ports:
       - "8080:80"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./compose-files:/var/www/html/compose-files
-      - ./traefik-configs:/var/www/html/traefik-configs
     environment:
       DB_SERVER: db
       DB_NAME: traefik_manager
@@ -32,7 +27,7 @@ services:
       MYSQL_DATABASE: traefik_manager
       MYSQL_USER: tm_user
       MYSQL_PASSWORD: tm_password
-      MYSQL_ROOT_PASSWORD: root_password_change_me # Ganti ini dengan password yang aman
+      MYSQL_ROOT_PASSWORD: root_password_change_me
     volumes:
       - db_data:/var/lib/mysql
     networks:

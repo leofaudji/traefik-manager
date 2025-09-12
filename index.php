@@ -82,6 +82,7 @@ $router->post('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', '
 $router->get('/api/hosts/{host_id}/stacks/{stack_name}/spec', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test', 'api/git_test_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test-compose-path', 'api/git_compose_test_handler.php', ['auth', 'admin']);
+$router->post('/api/app-launcher/preview', 'api/app_launcher_preview_handler.php', ['auth', 'admin']);
 $router->post('/api/app-launcher/deploy', 'api/app_launcher_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);

@@ -422,25 +422,66 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     viewYamlBtn.addEventListener('click', function() {
-        const composeObject = buildComposeObject();
+        const originalBtnContent = this.innerHTML;
+        const mainForm = document.getElementById('main-form');
+        const formData = new FormData(mainForm);
 
-        if (composeObject === 'git') {
-            showToast('YAML preview is only available for "From Existing Docker Image" source type.', false);
+        // Basic validation
+        if (!formData.get('host_id') || !formData.get('stack_name')) {
+            showToast('Please select a Host and provide a Stack Name to generate a preview.', false);
             return;
         }
 
-        if (!composeObject) {
-            showToast('Please fill in Stack Name and select an Image to generate a preview.', false);
-            return;
+        this.disabled = true;
+        this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...`;
+
+        let previewPromise;
+
+        if (sourceTypeImageRadio.checked) {
+            // Client-side generation for 'image' source
+            const composeObject = buildComposeObject();
+            if (!composeObject) {
+                showToast('Please select an Image to generate a preview.', false);
+                this.disabled = false;
+                this.innerHTML = originalBtnContent;
+                return;
+            }
+            const yamlString = jsyaml.dump(composeObject, { indent: 2 });
+            previewPromise = Promise.resolve(yamlString);
+
+        } else { // Git source
+            if (!formData.get('git_url')) {
+                showToast('Please enter a Git URL to generate a preview.', false);
+                this.disabled = false;
+                this.innerHTML = originalBtnContent;
+                return;
+            }
+            // Server-side generation for 'git' source
+            previewPromise = fetch(`${basePath}/api/app-launcher/preview`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json().then(data => {
+                if (!response.ok) throw new Error(data.message || 'Failed to generate preview from server.');
+                return data.yaml;
+            }));
         }
 
-        const yamlString = jsyaml.dump(composeObject, { indent: 2 });
-
-        previewModalLabel.textContent = 'Preview: Generated docker-compose.yml';
-        previewCodeContainer.textContent = yamlString;
-        Prism.highlightElement(previewCodeContainer);
-        deployFromPreviewBtn.style.display = 'none'; // This modal is for viewing only in this context
-        previewModal.show();
+        previewPromise
+            .then(yamlString => {
+                previewModalLabel.textContent = 'Preview: Generated docker-compose.yml';
+                previewCodeContainer.textContent = yamlString;
+                Prism.highlightElement(previewCodeContainer);
+                deployFromPreviewBtn.style.display = 'none';
+                previewModal.show();
+            })
+            .catch(error => {
+                showToast(error.message, false);
+            })
+            .finally(() => {
+                this.disabled = false;
+                this.innerHTML = originalBtnContent;
+            });
     });
 
     // Reset the deploy button visibility when the modal is hidden

@@ -387,10 +387,15 @@ class Spyc {
    */
   private function dumpNode($key, $value, $indent, $last_key = null) {
     // do some folding here, for blocks
-    if (is_string($value) && ((strpos($value, "\n") !== false || strpos($value, ": ") !== false || strpos($value, "- ") !== false ||
-      strpos($value, "*") !== false || strpos($value, "#") !== false || strpos($value, "<") !== false || strpos($value, ">") !== false ||
-      strpos($value, "[") !== false || strpos($value, "]") !== false || strpos($value, "{") !== false || strpos($value, "}") !== false) || substr($value, -1, 1) == ':')) {
-      $value = '| '.$this->LiteralPlaceHolder.str_replace("\n", "\n".str_repeat(' ', $indent), $value);
+    if (is_string($value) && strpos($value, "\n") !== false) {
+      // Use literal block for multi-line strings
+      $value_indent = $indent + $this->_dumpIndent;
+      $value = "|-\n" . str_repeat(' ', $value_indent) . $this->LiteralPlaceHolder . str_replace("\n", "\n" . str_repeat(' ', $value_indent), $value);
+    } elseif (is_string($value) && ((strpos($value, ": ") !== false || strpos($value, "- ") !== false ||
+        strpos($value, "*") !== false || strpos($value, "#") !== false || strpos($value, "<") !== false || strpos($value, ">") !== false || strpos($value, "!") !== false ||
+        strpos($value, "[") !== false || strpos($value, "]") !== false || strpos($value, "{") !== false || strpos($value, "}") !== false) || substr($value, -1, 1) == ':')) {
+      // For single-line strings with special characters, quote them to avoid them being parsed as syntax.
+      $value = '"' . str_replace('"', '\"', $value) . '"';
     }
 
     $spaces = str_repeat(' ', $indent);

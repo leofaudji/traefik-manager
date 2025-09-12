@@ -66,24 +66,6 @@ try {
             $host_running_containers = count(array_filter($containers, fn($c) => $c['State'] === 'running'));
             $host_total_containers = count($containers);
 
-            // Fetch latest historical stat for this host
-            $host_cpu_usage = 'N/A';
-            $host_mem_usage_percent = 'N/A';
-            $stmt_latest_stat = $conn->prepare("SELECT cpu_usage_percent, memory_usage_bytes, memory_limit_bytes FROM host_stats_history WHERE host_id = ? ORDER BY id DESC LIMIT 1");
-            $stmt_latest_stat->bind_param("i", $host['id']);
-            if ($stmt_latest_stat->execute()) {
-                $latest_stat_result = $stmt_latest_stat->get_result();
-                if ($latest_stat = $latest_stat_result->fetch_assoc()) {
-                    $host_cpu_usage = round($latest_stat['cpu_usage_percent'], 2);
-                    if ($latest_stat['memory_limit_bytes'] > 0) {
-                        $host_mem_usage_percent = round(($latest_stat['memory_usage_bytes'] / $latest_stat['memory_limit_bytes']) * 100, 2);
-                    } else {
-                        $host_mem_usage_percent = 0;
-                    }
-                }
-            }
-            $stmt_latest_stat->close();
-
             $agg_stats['total_containers'] += count($containers);
             $agg_stats['running_containers'] += $host_running_containers;
             $agg_stats['stopped_containers'] += count(array_filter($containers, fn($c) => $c['State'] === 'exited'));
@@ -101,8 +83,6 @@ try {
                 'memory' => $dockerInfo['MemTotal'] ?? 0,
                 'docker_version' => $dockerInfo['ServerVersion'] ?? 'N/A',
                 'os' => $dockerInfo['OperatingSystem'] ?? 'N/A',
-                'cpu_usage' => $host_cpu_usage,
-                'mem_usage_percent' => $host_mem_usage_percent,
             ];
         } catch (Exception $e) {
             // Log error but don't stop the process for other hosts
@@ -117,8 +97,6 @@ try {
                 'memory' => 'N/A',
                 'docker_version' => 'N/A',
                 'os' => 'N/A',
-                'cpu_usage' => 'N/A',
-                'mem_usage_percent' => 'N/A',
             ];
         }
     }
