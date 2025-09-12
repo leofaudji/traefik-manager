@@ -38,5 +38,8 @@ networks:
     driver: bridge
 
 volumes:
+  compose-files:
+    driver: local
+
   db_data:
     driver: local
