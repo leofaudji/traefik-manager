@@ -185,9 +185,15 @@ try {
                 if (is_dir($deployment_dir)) {
                     shell_exec("rm -rf " . escapeshellarg($deployment_dir));
                 }
-                // Move the cloned repo to the persistent deployment directory.
-                if (!rename($repo_path, $deployment_dir)) throw new Exception("Failed to move repository to deployment directory.");
-                $repo_path = null; // Prevent the GitHelper from cleaning up our new persistent directory.
+                // Use a recursive copy for cross-device compatibility, as rename() can fail.
+                // First, create the destination directory.
+                if (!mkdir($deployment_dir, 0755, true) && !is_dir($deployment_dir)) {
+                    throw new \RuntimeException(sprintf('Deployment directory "%s" could not be created.', $deployment_dir));
+                }
+                // Then, copy the contents of the cloned repo.
+                exec("cp -a " . escapeshellarg($repo_path . '/.') . " " . escapeshellarg($deployment_dir), $output, $return_var);
+                if ($return_var !== 0) throw new Exception("Failed to copy repository to deployment directory. Output: " . implode("\n", $output));
+                // The original temporary repo at $repo_path will be cleaned up by the 'finally' logic.
             } else {
                 // Use the temporary cloned repo path directly for deployment.
                 $deployment_dir = $repo_path;
