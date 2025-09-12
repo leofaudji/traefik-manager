@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: traefik-manager-app # Memberi nama eksplisit pada image
     container_name: traefik-manager
     restart: unless-stopped
     ports:
