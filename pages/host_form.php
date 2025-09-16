@@ -13,7 +13,9 @@ $host = [
     'client_cert_path' => '',
     'client_key_path' => '',
     'default_volume_path' => '/opt/stacks',
-    'default_compose_path' => ''
+    'registry_url' => '',
+    'registry_username' => '',
+    'registry_password' => ''
 ];
 
 if (isset($_GET['id'])) {
@@ -64,16 +66,25 @@ require_once __DIR__ . '/../includes/header.php';
                 <small class="form-text text-muted">Base path on the host where application data volumes will be created (e.g., `/opt/stacks`).</small>
             </div>
 
-            <div class="mb-3">
-                <label for="default_compose_path" class="form-label">Default Compose File Path</label>
-                <input type="text" class="form-control" id="default_compose_path" name="default_compose_path" value="<?= htmlspecialchars($host['default_compose_path'] ?? '') ?>" placeholder="/var/www/html/traefik-manager/compose-files">
-                <small class="form-text text-muted">Base path on this application server to store generated docker-compose files for this host's standalone deployments. Leave blank to use temporary directories.</small>
+            <hr>
+            <h5 class="mb-3">Private Registry Credentials (Optional)</h5>
+            <div class="alert alert-warning small">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <strong>Warning:</strong> Credentials are saved as plain text in the database. Use access tokens with limited permissions where possible.
             </div>
-
-            <div class="mb-3">
-                <label for="default_git_compose_path" class="form-label">Default Git Compose Path</label>
-                <input type="text" class="form-control" id="default_git_compose_path" name="default_git_compose_path" value="<?= htmlspecialchars($host['default_git_compose_path'] ?? '') ?>" placeholder="docker-compose.yml">
-                <small class="form-text text-muted">Default path to the compose file within a Git repository for this host (e.g., `deploy/docker-compose.yml`).</small>
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label for="registry_url" class="form-label">Registry URL</label>
+                    <input type="text" class="form-control" id="registry_url" name="registry_url" value="<?= htmlspecialchars($host['registry_url'] ?? '') ?>" placeholder="e.g., docker.io (for Docker Hub), ghcr.io">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="registry_username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="registry_username" name="registry_username" value="<?= htmlspecialchars($host['registry_username'] ?? '') ?>">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="registry_password" class="form-label">Password / Access Token</label>
+                    <input type="password" class="form-control" id="registry_password" name="registry_password" value="<?= htmlspecialchars($host['registry_password'] ?? '') ?>">
+                </div>
             </div>
 
             <hr>

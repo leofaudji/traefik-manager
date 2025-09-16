@@ -7,6 +7,7 @@ class DockerClient
     private ?string $caCertPath;
     private ?string $clientCertPath;
     private ?string $clientKeyPath;
+    private array $host;
 
     /**
      * @param array $host An associative array of host details from the database.
@@ -17,6 +18,7 @@ class DockerClient
             throw new InvalidArgumentException("Docker API URL is required.");
         }
 
+        $this->host = $host;
         $this->apiUrl = ($host['tls_enabled'] ? 'https://' : 'http://') . str_replace('tcp://', '', $host['docker_api_url']);
         $this->tlsEnabled = (bool)$host['tls_enabled'];
 
@@ -31,6 +33,17 @@ class DockerClient
             $this->clientCertPath = $host['client_cert_path'];
             $this->clientKeyPath = $host['client_key_path'];
         }
+    }
+
+    /**
+     * Inspects a single container to get its full details.
+     * @param string $containerId The ID of the container.
+     * @return array The container details.
+     * @throws Exception
+     */
+    public function inspectContainer(string $containerId): array
+    {
+        return $this->request("/containers/{$containerId}/json");
     }
 
     /**
@@ -77,6 +90,17 @@ class DockerClient
     }
 
     /**
+     * Prunes unused containers.
+     * @return array The response from the API, including containers deleted and space reclaimed.
+     * @throws Exception
+     */
+    public function pruneContainers(): array
+    {
+        // The prune endpoint doesn't require a body
+        return $this->request('/containers/prune', 'POST');
+    }
+
+    /**
      * Lists all networks.
      * @return array The list of networks.
      * @throws Exception
@@ -109,6 +133,17 @@ class DockerClient
     }
 
     /**
+     * Prunes unused networks.
+     * @return array The response from the API, including networks deleted.
+     * @throws Exception
+     */
+    public function pruneNetworks(): array
+    {
+        // The prune endpoint doesn't require a body
+        return $this->request('/networks/prune', 'POST');
+    }
+
+    /**
      * Removes an image.
      * @param string $imageIdOrName The ID or name of the image.
      * @return bool True on success.
@@ -116,7 +151,133 @@ class DockerClient
      */
     public function removeImage(string $imageIdOrName): bool
     {
-        return $this->request("/images/{$imageIdOrName}", 'DELETE');
+        $this->request("/images/{$imageIdOrName}", 'DELETE');
+        // If the request did not throw an exception, it was successful.
+        return true;
+    }
+
+    /**
+     * Prunes unused images.
+     * @return array The response from the API, including space reclaimed.
+     * @throws Exception
+     */
+    public function pruneImages(): array
+    {
+        // The filter `dangling=false` prunes all unused images, not just dangling ones.
+        // The filter is JSON `{"dangling":["false"]}` which needs to be URL encoded.
+        return $this->request('/images/prune?filters=%7B%22dangling%22%3A%5B%22false%22%5D%7D', 'POST');
+    }
+
+    /**
+     * Pulls an image from a registry.
+     * @param string $imageName The name of the image to pull (e.g., nginx:latest).
+     * @return string The output from the pull command.
+     * @throws Exception
+     */
+    public function pullImage(string $imageName): string
+    {
+        $env_vars = "DOCKER_HOST=" . escapeshellarg($this->host['docker_api_url']);
+        $docker_config_dir = null;
+        $cert_dir = null;
+
+        if ($this->tlsEnabled) {
+            $cert_dir = rtrim(sys_get_temp_dir(), '/') . '/docker_certs_' . uniqid();
+            if (!mkdir($cert_dir, 0700, true)) throw new Exception("Could not create temporary cert directory.");
+            
+            copy($this->caCertPath, $cert_dir . '/ca.pem');
+            copy($this->clientCertPath, $cert_dir . '/cert.pem');
+            copy($this->clientKeyPath, $cert_dir . '/key.pem');
+
+            $env_vars .= " DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=" . escapeshellarg($cert_dir);
+        }
+
+        $login_command = '';
+        if (!empty($this->host['registry_username']) && !empty($this->host['registry_password'])) {
+            $docker_config_dir = rtrim(sys_get_temp_dir(), '/') . '/docker_config_' . uniqid();
+            if (!mkdir($docker_config_dir, 0700, true)) throw new Exception("Could not create temporary docker config directory.");
+            $env_vars .= " DOCKER_CONFIG=" . escapeshellarg($docker_config_dir);
+            $registry_url = !empty($this->host['registry_url']) ? escapeshellarg($this->host['registry_url']) : '';
+            $login_command = "echo " . escapeshellarg($this->host['registry_password']) . " | docker login {$registry_url} -u " . escapeshellarg($this->host['registry_username']) . " --password-stdin 2>&1 && ";
+        }
+
+        $pull_command = "docker image pull " . escapeshellarg($imageName) . " 2>&1";
+        $script_to_run = $login_command . $pull_command;
+        $full_command = 'env ' . $env_vars . ' sh -c ' . escapeshellarg($script_to_run);
+
+        set_time_limit(300);
+        exec($full_command, $output, $return_var);
+
+        if (isset($cert_dir) && is_dir($cert_dir)) shell_exec("rm -rf " . escapeshellarg($cert_dir));
+        if (isset($docker_config_dir) && is_dir($docker_config_dir)) shell_exec("rm -rf " . escapeshellarg($docker_config_dir));
+
+        if ($return_var !== 0) throw new Exception("Failed to pull image. Output: " . implode("\n", $output));
+
+        return implode("\n", $output);
+    }
+
+    /**
+     * Inspects an image to get its details.
+     * @param string $imageName The name or ID of the image.
+     * @return array The image details.
+     * @throws Exception
+     */
+    public function inspectImage(string $imageName): array
+    {
+        return $this->request("/images/{$imageName}/json");
+    }
+
+    /**
+     * Lists all volumes.
+     * @return array The list of volumes.
+     * @throws Exception
+     */
+    public function listVolumes(): array
+    {
+        return $this->request('/volumes');
+    }
+
+    /**
+     * Creates a new volume.
+     * @param array $config The volume configuration.
+     * @return array The response from the API.
+     * @throws Exception
+     */
+    public function createVolume(array $config): array
+    {
+        return $this->request('/volumes/create', 'POST', $config);
+    }
+
+    /**
+     * Inspects a single volume to get its details.
+     * @param string $volumeName The name of the volume.
+     * @return array The volume details.
+     * @throws Exception
+     */
+    public function inspectVolume(string $volumeName): array
+    {
+        return $this->request("/volumes/{$volumeName}");
+    }
+
+    /**
+     * Prunes unused volumes.
+     * @return array The response from the API, including space reclaimed.
+     * @throws Exception
+     */
+    public function pruneVolumes(): array
+    {
+        // The prune endpoint doesn't require a body
+        return $this->request('/volumes/prune', 'POST');
+    }
+
+    /**
+     * Removes a volume.
+     * @param string $volumeName The name of the volume.
+     * @return bool True on success.
+     * @throws Exception
+     */
+    public function removeVolume(string $volumeName): bool
+    {
+        return $this->request("/volumes/{$volumeName}", 'DELETE');
     }
 
     /**
@@ -177,7 +338,9 @@ class DockerClient
     public function updateStack(string $stackId, string $composeContent, int $version): bool
     {
         // The Docker API for stack update expects the raw compose content directly in the body.
-        return $this->request("/stacks/{$stackId}/update?version={$version}", 'POST', $composeContent, 'application/x-yaml');
+        $this->request("/stacks/{$stackId}/update?version={$version}", 'POST', $composeContent, 'application/x-yaml');
+        // If the request did not throw an exception, it was successful.
+        return true;
     }
 
     /**

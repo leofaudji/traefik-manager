@@ -183,8 +183,8 @@ require_once 'includes/header.php';
                         <th>Host</th>
                         <th>Status</th>
                         <th>Containers</th>
-                        <th>CPU Limit</th>
-                        <th>Memory Limit</th>
+                        <th>Total CPUs</th>
+                        <th>Total Memory</th>
                         <th>Docker Version</th>
                         <th>OS</th>
                         <th class="text-end">Actions</th>
@@ -203,16 +203,6 @@ require_once 'includes/header.php';
 <?php
 $conn->close();
 ?>
-<script>
-function formatBytes(bytes, precision = 2) {
-    if (!+bytes) return '0 B';
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-
-    return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(precision))} ${units[i]}`;
-}
-</script>
 <?php
 require_once 'includes/footer.php';
 ?>

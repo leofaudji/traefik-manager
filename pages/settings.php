@@ -76,6 +76,25 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
 
             <hr>
+            <h5 class="mb-3">Deployment Settings</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="default_compose_path" class="form-label">Default Standalone Compose Path</label>
+                        <input type="text" class="form-control" id="default_compose_path" name="default_compose_path" value="<?= htmlspecialchars($settings['default_compose_path'] ?? '/var/www/html/compose-files') ?>">
+                        <small class="form-text text-muted">Base path on this server to store generated compose files for standalone hosts.</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="default_git_compose_path" class="form-label">Default Git Compose Path</label>
+                        <input type="text" class="form-control" id="default_git_compose_path" name="default_git_compose_path" value="<?= htmlspecialchars($settings['default_git_compose_path'] ?? 'docker-compose.yml') ?>">
+                        <small class="form-text text-muted">Default path to the compose file within a Git repository (e.g., `deploy/docker-compose.yml`).</small>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
             <h5 class="mb-3">Git Integration</h5>
             <div class="form-check form-switch mb-3">
                 <input type="hidden" name="git_integration_enabled" value="0">
@@ -121,6 +140,26 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             
             <hr>
+            <h5 class="mb-3">Webhook Automation</h5>
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle-fill"></i>
+                Use this webhook URL in your Git provider (e.g., GitHub, GitLab) to automatically trigger a "Generate & Deploy" action when you push to the configured branch.
+            </div>
+            <div class="mb-3">
+                <label for="webhook-url" class="form-label">Webhook URL</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="webhook-url" value="<?= base_url('/api/webhook/deploy?token=') . htmlspecialchars($settings['webhook_secret_token'] ?? '') ?>" readonly>
+                    <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-text="<?= base_url('/api/webhook/deploy?token=') . htmlspecialchars($settings['webhook_secret_token'] ?? '') ?>" title="Copy URL"><i class="bi bi-clipboard"></i></button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <button type="button" class="btn btn-warning" id="regenerate-webhook-token-btn">
+                    <i class="bi bi-arrow-repeat"></i> Regenerate Secret Token
+                </button>
+                <small class="form-text text-muted d-block mt-1">Regenerating the token will invalidate the old URL. You must update your Git provider with the new URL.</small>
+            </div>
+
+            <hr>
             <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
     </div>
@@ -137,6 +176,36 @@ document.addEventListener('DOMContentLoaded', function() {
     gitToggle.addEventListener('change', function() {
         gitContainer.style.display = this.checked ? 'block' : 'none';
     });
+
+    const regenerateBtn = document.getElementById('regenerate-webhook-token-btn');
+    if (regenerateBtn) {
+        regenerateBtn.addEventListener('click', function() {
+            if (!confirm('Are you sure you want to regenerate the webhook token? The old URL will stop working immediately.')) {
+                return;
+            }
+            const originalBtnText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Regenerating...`;
+
+            fetch('<?= base_url('/api/webhook/regenerate-token') ?>', { method: 'POST' })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok) {
+                        const newUrl = '<?= base_url('/api/webhook/deploy?token=') ?>' + data.new_token;
+                        document.getElementById('webhook-url').value = newUrl;
+                        document.querySelector('.copy-btn[data-clipboard-text]').dataset.clipboardText = newUrl;
+                        showToast('Webhook token regenerated successfully. Please update your Git provider.', true);
+                    } else {
+                        throw new Error(data.message || 'Failed to regenerate token.');
+                    }
+                })
+                .catch(error => showToast(error.message, false))
+                .finally(() => {
+                    this.disabled = false;
+                    this.innerHTML = originalBtnText;
+                });
+        });
+    }
 });
 </script>
 <?php

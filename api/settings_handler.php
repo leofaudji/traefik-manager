@@ -17,6 +17,8 @@ try {
         'default_router_middleware' => $_POST['default_router_middleware'] ?? 0,
         'default_router_prefix' => $_POST['default_router_prefix'] ?? 'router-',
         'default_service_prefix' => $_POST['default_service_prefix'] ?? 'service-',
+        'default_compose_path' => trim($_POST['default_compose_path'] ?? ''),
+        'default_git_compose_path' => trim($_POST['default_git_compose_path'] ?? ''),
         'git_integration_enabled' => $_POST['git_integration_enabled'] ?? 0,
         'git_repository_url' => trim($_POST['git_repository_url'] ?? ''),
         'git_branch' => trim($_POST['git_branch'] ?? 'main'),

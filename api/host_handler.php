@@ -43,8 +43,9 @@ $ca_cert_path = trim($_POST['ca_cert_path'] ?? '');
 $client_cert_path = trim($_POST['client_cert_path'] ?? '');
 $client_key_path = trim($_POST['client_key_path'] ?? '');
 $default_volume_path = trim($_POST['default_volume_path'] ?? '/opt/stacks');
-$default_compose_path = trim($_POST['default_compose_path'] ?? '');
-$default_git_compose_path = trim($_POST['default_git_compose_path'] ?? '');
+$registry_url = trim($_POST['registry_url'] ?? '');
+$registry_username = trim($_POST['registry_username'] ?? '');
+$registry_password = $_POST['registry_password'] ?? ''; // Don't trim password
 $is_edit = !empty($id);
 
 if (empty($name) || empty($docker_api_url)) {
@@ -75,14 +76,14 @@ try {
     $stmt_check->close();
 
     if ($is_edit) {
-        $stmt = $conn->prepare("UPDATE docker_hosts SET name = ?, docker_api_url = ?, description = ?, tls_enabled = ?, ca_cert_path = ?, client_cert_path = ?, client_key_path = ?, default_volume_path = ?, default_compose_path = ?, default_git_compose_path = ? WHERE id = ?");
-        $stmt->bind_param("sssissssssi", $name, $docker_api_url, $description, $tls_enabled, $ca_cert_path, $client_cert_path, $client_key_path, $default_volume_path, $default_compose_path, $default_git_compose_path, $id);
+        $stmt = $conn->prepare("UPDATE docker_hosts SET name = ?, docker_api_url = ?, description = ?, tls_enabled = ?, ca_cert_path = ?, client_cert_path = ?, client_key_path = ?, default_volume_path = ?, registry_url = ?, registry_username = ?, registry_password = ? WHERE id = ?");
+        $stmt->bind_param("sssisssssssi", $name, $docker_api_url, $description, $tls_enabled, $ca_cert_path, $client_cert_path, $client_key_path, $default_volume_path, $registry_url, $registry_username, $registry_password, $id);
         $log_action = 'Host Edited';
         $log_details = "Host '{$name}' (ID: {$id}) has been updated.";
         $success_message = 'Host successfully updated.';
     } else {
-        $stmt = $conn->prepare("INSERT INTO docker_hosts (name, docker_api_url, description, tls_enabled, ca_cert_path, client_cert_path, client_key_path, default_volume_path, default_compose_path, default_git_compose_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssissssss", $name, $docker_api_url, $description, $tls_enabled, $ca_cert_path, $client_cert_path, $client_key_path, $default_volume_path, $default_compose_path, $default_git_compose_path);
+        $stmt = $conn->prepare("INSERT INTO docker_hosts (name, docker_api_url, description, tls_enabled, ca_cert_path, client_cert_path, client_key_path, default_volume_path, registry_url, registry_username, registry_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssisssssss", $name, $docker_api_url, $description, $tls_enabled, $ca_cert_path, $client_cert_path, $client_key_path, $default_volume_path, $registry_url, $registry_username, $registry_password);
         $log_action = 'Host Added';
         $log_details = "New host '{$name}' has been created.";
         $success_message = 'Host successfully created.';

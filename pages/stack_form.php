@@ -8,8 +8,10 @@ $stack = [
     'name' => '',
     'description' => '',
 ];
+$details = []; // For builder data
 
 $host_id = $_GET['id'] ?? null;
+$stack_db_id = $_GET['stack_db_id'] ?? null;
 
 // Get host name for the header
 $stmt = $conn->prepare("SELECT name FROM docker_hosts WHERE id = ?");
@@ -21,6 +23,26 @@ if (!($host = $host_result->fetch_assoc())) {
     exit;
 }
 $stmt->close();
+
+if ($stack_db_id) {
+    $is_edit = true;
+    $stmt_stack = $conn->prepare("SELECT * FROM application_stacks WHERE id = ? AND host_id = ?");
+    $stmt_stack->bind_param("ii", $stack_db_id, $host_id);
+    $stmt_stack->execute();
+    $stack_result = $stmt_stack->get_result();
+    if (!($stack_data = $stack_result->fetch_assoc())) {
+        header("Location: " . base_url('/hosts/' . $host_id . '/stacks?status=error&message=Stack not found in database.'));
+        exit;
+    }
+    $stmt_stack->close();
+
+    $details = json_decode($stack_data['deployment_details'], true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        $details = [];
+    }
+    $stack['name'] = $details['name'] ?? '';
+    $stack['description'] = $details['description'] ?? '';
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -38,14 +60,15 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="card-body">
         <form id="stack-builder-form" action="<?= base_url('/api/hosts/' . $host_id . '/stacks') ?>" method="POST" data-redirect="<?= base_url('/hosts/' . $host_id . '/stacks') ?>">
-            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="action" value="<?= $is_edit ? 'update' : 'create' ?>">
+            <input type="hidden" name="stack_db_id" value="<?= htmlspecialchars($stack_db_id) ?>">
             <input type="hidden" name="host_id" value="<?= htmlspecialchars($host_id) ?>">
             <!-- Stack Info -->
             <h4>Stack Information</h4>
             <div class="row mb-3">
                 <div class="col-md-6 mb-3">
                     <label for="stack-name" class="form-label">Stack Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="stack-name" name="name" value="<?= htmlspecialchars($stack['name']) ?>" required>
+                    <input type="text" class="form-control" id="stack-name" name="name" value="<?= htmlspecialchars($stack['name']) ?>" required <?= $is_edit ? 'readonly' : '' ?>>
                     <small class="form-text text-muted">A unique name for this application stack, e.g., `my-awesome-app`.</small>
                 </div>
                 <div class="col-md-6 mb-3">
@@ -71,7 +94,7 @@ require_once __DIR__ . '/../includes/header.php';
             <button type="button" class="btn btn-outline-success mt-2" id="add-network-btn"><i class="bi bi-plus-circle"></i> Add Network</button>
 
             <a href="<?= base_url('/hosts/' . $host_id . '/stacks') ?>" class="btn btn-secondary mt-3">Cancel</a>
-            <button type="submit" class="btn btn-primary mt-3" id="save-stack-btn">Deploy Stack</button>
+            <button type="submit" class="btn btn-primary mt-3" id="save-stack-btn"><?= $is_edit ? 'Update Stack' : 'Deploy Stack' ?></button>
         </form>
     </div>
 </div>
@@ -187,6 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addNetworkBtn = document.getElementById('add-network-btn');
     const hostId = <?= $host_id ?>;
     let isSwarmManager = false;
+    const deploymentDetails = <?= json_encode($details) ?>;
     let availableNetworks = [];
 
     // Fetch available networks on page load to populate dropdowns
@@ -209,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(result => {
             if (result.status === 'success' && result.data.is_swarm_manager) {
                 isSwarmManager = true;
-                submitButton.textContent = 'Deploy Stack';
+                submitButton.textContent = '<?= $is_edit ? 'Update Stack' : 'Deploy Stack' ?>';
             } else {
                 isSwarmManager = false;
                 submitButton.textContent = 'Generate Compose File';
@@ -363,6 +387,14 @@ document.addEventListener('DOMContentLoaded', function() {
             e.target.closest('.input-group').remove();
         }
     });
+
+    // --- Initial Population for Edit Mode ---
+    if (deploymentDetails.services && Array.isArray(deploymentDetails.services)) {
+        deploymentDetails.services.forEach(serviceData => addService(serviceData));
+    }
+    if (deploymentDetails.networks && Array.isArray(deploymentDetails.networks)) {
+        deploymentDetails.networks.forEach(networkData => addNetwork(networkData));
+    }
 
     function buildComposeObject() {
         const compose = { version: '3.8', services: {}, networks: {} };

@@ -44,9 +44,10 @@ $db_name = Config::get('DB_NAME');
 
 // --- SQL Statements ---
 $default_password_hash = password_hash('password', PASSWORD_DEFAULT);
+$webhook_token = bin2hex(random_bytes(32)); // Generate a secure random token
 
 $sql = "
-DROP TABLE IF EXISTS `activity_log`, `config_history`, `router_middleware`, `servers`, `routers`, `middlewares`, `transports`, `services`, `groups`, `users`, `settings`, `configuration_templates`, `docker_hosts`, `host_stats_history`, `application_stacks`;
+DROP TABLE IF EXISTS `activity_log`, `config_history`, `router_middleware`, `servers`, `routers`, `middlewares`, `transports`, `services`, `groups`, `users`, `settings`, `configuration_templates`, `application_stacks`, `docker_hosts`, `host_stats_history`;
 
 CREATE TABLE `settings` (
   `setting_key` varchar(50) NOT NULL,
@@ -84,8 +85,9 @@ CREATE TABLE `docker_hosts` (
   `client_cert_path` varchar(255) DEFAULT NULL,
   `client_key_path` varchar(255) DEFAULT NULL,
   `default_volume_path` varchar(255) DEFAULT NULL COMMENT 'Base path for application volumes on this host',
-  `default_compose_path` varchar(255) DEFAULT NULL,
-  `default_git_compose_path` varchar(255) DEFAULT NULL COMMENT 'Default path to compose file inside a git repo',
+  `registry_url` varchar(255) DEFAULT NULL,
+  `registry_username` varchar(255) DEFAULT NULL,
+  `registry_password` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -102,6 +104,20 @@ CREATE TABLE `host_stats_history` (
   PRIMARY KEY (`id`),
   KEY `host_id_created_at` (`host_id`,`created_at`),
   CONSTRAINT `host_stats_history_ibfk_1` FOREIGN KEY (`host_id`) REFERENCES `docker_hosts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `application_stacks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `host_id` int(11) NOT NULL,
+  `stack_name` varchar(255) NOT NULL,
+  `source_type` enum('git','image') NOT NULL,
+  `compose_file_path` varchar(255) NOT NULL,
+  `deployment_details` text DEFAULT NULL COMMENT 'JSON-encoded POST data from original deployment',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `host_id_stack_name` (`host_id`,`stack_name`),
+  CONSTRAINT `application_stacks_ibfk_1` FOREIGN KEY (`host_id`) REFERENCES `docker_hosts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `configuration_templates` (
@@ -213,7 +229,10 @@ CREATE TABLE `activity_log` (
 
 -- Default settings
 INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES ('default_group_id', '1'),
-('history_cleanup_days', '30');
+('history_cleanup_days', '30'),
+('default_compose_path', '/var/www/html/compose-files'),
+('default_git_compose_path', 'docker-compose.yml'),
+('webhook_secret_token', '{$webhook_token}');
 
 -- Default user: admin, password: password, role: admin
 INSERT INTO `users` (`username`, `password`, `role`) VALUES ('admin', '{$default_password_hash}', 'admin');
@@ -288,11 +307,11 @@ INSERT INTO `docker_hosts` (`id`, `name`, `docker_api_url`, `description`, `tls_
 
 INSERT INTO `transports` (`name`, `insecure_skip_verify`) VALUES ('dsm-transport', 1);
 
-ALTER TABLE `docker_hosts` ADD `default_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_volume_path`;
-ALTER TABLE `docker_hosts` ADD `default_git_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_compose_path`;
 
 ";
 
+//ALTER TABLE `docker_hosts` ADD `default_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_volume_path`;
+//ALTER TABLE `docker_hosts` ADD `default_git_compose_path` VARCHAR(255) NULL DEFAULT NULL AFTER `default_compose_path`;
 
 
 // --- Execution Logic ---

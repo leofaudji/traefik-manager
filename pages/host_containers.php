@@ -26,27 +26,46 @@ require_once __DIR__ . '/../includes/host_nav.php';
 
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Containers</h5>
-        <div>
+        <h5 class="mb-0"><i class="bi bi-box-seam"></i> Containers</h5>
+        <div class="d-flex align-items-center">
+            <div id="bulk-actions-container" class="dropdown me-2" style="display: none;">
+                <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="bulk-actions-btn" data-bs-toggle="dropdown" aria-expanded="false">
+                    Bulk Actions
+                </button>
+                <ul class="dropdown-menu" aria-labelledby="bulk-actions-btn">
+                    <li><a class="dropdown-item bulk-action-trigger" href="#" data-action="start">Start Selected</a></li>
+                    <li><a class="dropdown-item bulk-action-trigger" href="#" data-action="stop">Stop Selected</a></li>
+                    <li><a class="dropdown-item bulk-action-trigger" href="#" data-action="restart">Restart Selected</a></li>
+                </ul>
+            </div>
+            <form class="search-form me-2" data-type="containers" id="container-search-form" onsubmit="return false;">
+                <div class="input-group input-group-sm">
+                    <input type="text" name="search_containers" class="form-control" placeholder="Search by name or image...">
+                    <button class="btn btn-outline-secondary" type="submit" title="Search"><i class="bi bi-search"></i></button>
+                    <button class="btn btn-outline-secondary reset-search-btn" type="button" title="Reset"><i class="bi bi-x-lg"></i></button>
+                </div>
+            </form> 
             <div class="btn-group btn-group-sm me-2" role="group" id="container-filter-group">
                 <button type="button" class="btn btn-outline-secondary active" data-filter="all">All</button>
                 <button type="button" class="btn btn-outline-secondary" data-filter="running">Running</button>
                 <button type="button" class="btn btn-outline-secondary" data-filter="stopped">Stopped</button>
             </div>
-            <button id="refresh-containers-btn" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            <button id="check-all-updates-btn" class="btn btn-sm btn-outline-info me-2" title="Check all visible containers for image updates"><i class="bi bi-cloud-arrow-down-fill"></i> Check All</button>
+            <button id="prune-containers-btn" class="btn btn-sm btn-outline-warning me-2" title="Remove all stopped containers"><i class="bi bi-trash3"></i> Prune</button>
+            <button id="refresh-containers-btn" class="btn btn-sm btn-outline-primary" title="Refresh List"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
     </div>
     <div class="card-body">
-        <div class="table-responsive">
+        <div class="table-responsive table-responsive-sticky">
             <table class="table table-striped table-sm table-hover">
                 <thead>
                     <tr>
+                        <th><input class="form-check-input" type="checkbox" id="select-all-containers" title="Select all containers"></th>
                         <th>Name</th>
                         <th>Image</th>
                         <th>State</th>
                         <th>Status</th>
                         <th>IP Address</th>
-                        <th>Volumes</th>
                         <th>Networks</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -82,6 +101,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const paginationContainer = document.getElementById('containers-pagination');
     const infoContainer = document.getElementById('containers-info');
     const limitSelector = document.getElementById('containers-limit-selector');
+    const searchForm = document.getElementById('container-search-form');
+    const searchInput = searchForm.querySelector('input[name="search_containers"]');
+    const resetBtn = searchForm.querySelector('.reset-search-btn');
+    const pruneBtn = document.getElementById('prune-containers-btn');
+    const bulkActionsContainer = document.getElementById('bulk-actions-container');
+    const checkAllUpdatesBtn = document.getElementById('check-all-updates-btn');
+    const selectAllCheckbox = document.getElementById('select-all-containers');
 
     let currentFilter = localStorage.getItem(`host_${hostId}_containers_filter`) || 'all';
     let currentPage = 1;
@@ -96,10 +122,11 @@ document.addEventListener('DOMContentLoaded', function() {
         currentLimit = parseInt(limit) || 10;
         const originalBtnContent = refreshBtn.innerHTML;
         refreshBtn.disabled = true;
-        refreshBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing...`;
+        refreshBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`;
         containerBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
-        const fetchUrl = `${basePath}/api/hosts/${hostId}/containers?page=${page}&limit=${limit}&filter=${currentFilter}`;
+        const searchTerm = searchInput.value.trim();
+        const fetchUrl = `${basePath}/api/hosts/${hostId}/containers?page=${page}&limit=${limit}&filter=${currentFilter}&search=${encodeURIComponent(searchTerm)}`;
 
         fetch(fetchUrl)
             .then(response => response.json())
@@ -126,8 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_containers_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_containers_limit`, result.limit);
                 localStorage.setItem(`host_${hostId}_containers_filter`, currentFilter);
-            })
-            .catch(error => containerBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load containers: ${error.message}</td></tr>`)
+            }).catch(error => containerBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load containers: ${error.message}</td></tr>`)
             .finally(() => {
                 refreshBtn.disabled = false;
                 refreshBtn.innerHTML = originalBtnContent;
@@ -137,6 +163,203 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Event Listeners ---
 
     refreshBtn.addEventListener('click', reloadCurrentView);
+
+    if (pruneBtn) {
+        pruneBtn.addEventListener('click', function() {
+            if (!confirm('Are you sure you want to remove all stopped containers? This action cannot be undone.')) {
+                return;
+            }
+
+            const originalBtnContent = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Pruning...`;
+
+            const url = `${basePath}/api/hosts/${hostId}/containers/prune`;
+
+            fetch(url, { method: 'POST' })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    showToast(data.message, ok);
+                    if (ok) {
+                        // Refresh the view after a short delay to allow Docker to update the container's state.
+                        setTimeout(reloadCurrentView, 2000);
+                    }
+                })
+                .catch(error => {
+                    showToast(error.message || 'An unknown error occurred during prune.', false);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.innerHTML = originalBtnContent;
+                });
+        });
+    }
+
+    function updateBulkActionsVisibility() {
+        const checkedBoxes = containerBody.querySelectorAll('.container-checkbox:checked');
+        if (checkedBoxes.length > 0) {
+            bulkActionsContainer.style.display = 'block';
+        } else {
+            bulkActionsContainer.style.display = 'none';
+        }
+    }
+
+    containerBody.addEventListener('change', (e) => {
+        if (e.target.matches('.container-checkbox')) {
+            updateBulkActionsVisibility();
+        }
+    });
+
+    selectAllCheckbox.addEventListener('change', function() {
+        const isChecked = this.checked;
+        containerBody.querySelectorAll('.container-checkbox').forEach(checkbox => {
+            checkbox.checked = isChecked;
+        });
+        updateBulkActionsVisibility();
+    });
+
+    bulkActionsContainer.addEventListener('click', function(e) {
+        const trigger = e.target.closest('.bulk-action-trigger');
+        if (!trigger) return;
+
+        e.preventDefault();
+        const action = trigger.dataset.action;
+        const checkedBoxes = Array.from(containerBody.querySelectorAll('.container-checkbox:checked'));
+        const containerIds = checkedBoxes.map(cb => cb.value);
+
+        if (containerIds.length === 0) {
+            showToast('No containers selected.', false);
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to ${action} ${containerIds.length} selected container(s)?`)) {
+            return;
+        }
+
+        let completed = 0;
+        const total = containerIds.length;
+        showToast(`Performing bulk action '${action}' on ${total} containers...`, true);
+
+        containerIds.forEach(containerId => {
+            const url = `${basePath}/api/hosts/${hostId}/containers/${containerId}/${action}`;
+            fetch(url, { method: 'POST' })
+                .catch(error => {
+                    console.error(`Error during bulk action for container ${containerId}:`, error);
+                })
+                .finally(() => {
+                    completed++;
+                    if (completed === total) {
+                        showToast(`Bulk action '${action}' completed.`, true);
+                        setTimeout(reloadCurrentView, 2000);
+                    }
+                });
+        });
+    });
+
+    function checkContainerUpdate(button) {
+        const containerId = button.dataset.containerId;
+        const stackId = button.dataset.stackId;
+
+        // If the button is already in "update available" state, redirect to the update page.
+        if (button.classList.contains('update-available')) {
+            if (stackId) {
+                window.location.href = `${basePath}/hosts/${hostId}/stacks/${stackId}/update`;
+            } else {
+                showToast('This container is not part of a managed stack and cannot be updated automatically.', false);
+            }
+            return;
+        }
+
+        button.disabled = true;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`;
+
+        const url = `${basePath}/api/hosts/${hostId}/containers/${containerId}/check-update`;
+
+        return fetch(url, { method: 'POST' }) // Return the promise
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok) {
+                    if (data.update_available) {
+                        button.innerHTML = `<i class="bi bi-arrow-up-circle-fill"></i>`;
+                        button.classList.remove('btn-outline-secondary', 'btn-outline-success');
+                        button.classList.add('btn-warning', 'update-available');
+                        if (stackId) {
+                            button.title = `Update available for ${data.image_tag}. Click to update stack.`;
+                        } else {
+                            button.title = `Update available for ${data.image_tag}, but automatic update is not possible (not a managed stack).`;
+                            button.disabled = true; // Disable if not manageable
+                        }
+                    } else {
+                        button.innerHTML = `<i class="bi bi-check-circle-fill"></i>`;
+                        button.classList.remove('btn-outline-secondary', 'btn-warning');
+                        button.classList.add('btn-outline-success');
+                        button.title = `Image ${data.image_tag} is up to date. Click to re-check.`;
+                    }
+                } else {
+                    throw new Error(data.message || 'Check failed.');
+                }
+            })
+            .catch(error => {
+                button.innerHTML = `<i class="bi bi-x-circle-fill text-danger"></i>`;
+                button.title = `Error: ${error.message}. Click to retry.`;
+            })
+            .finally(() => {
+                // Re-enable the button unless it's an un-managed stack with an update
+                if (!button.classList.contains('update-available') || stackId) {
+                    button.disabled = false;
+                }
+            });
+    }
+
+    if (checkAllUpdatesBtn) {
+        checkAllUpdatesBtn.addEventListener('click', function() {
+            const individualCheckButtons = containerBody.querySelectorAll('.update-check-btn');
+            if (individualCheckButtons.length === 0) {
+                showToast('No containers to check.', true);
+                return;
+            }
+
+            const originalBtnContent = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...`;
+
+            const checkPromises = [];
+            individualCheckButtons.forEach(btn => {
+                checkPromises.push(checkContainerUpdate(btn));
+            });
+
+            Promise.allSettled(checkPromises).then(() => {
+                showToast(`Update check finished for ${individualCheckButtons.length} containers.`, true);
+                this.disabled = false;
+                this.innerHTML = originalBtnContent;
+            });
+        });
+    }
+
+    containerBody.addEventListener('click', function(e) {
+        const updateBtn = e.target.closest('.update-check-btn');
+        if (updateBtn) {
+            e.preventDefault();
+            checkContainerUpdate(updateBtn);
+        }
+    });
+
+    searchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        loadContainers(1, limitSelector.value);
+    });
+
+    resetBtn.addEventListener('click', function() {
+        if (searchInput.value !== '') {
+            searchInput.value = '';
+            loadContainers(1, limitSelector.value);
+        }
+    });
+
+    // Debounce is available from main.js
+    searchInput.addEventListener('input', debounce(() => {
+        loadContainers(1, limitSelector.value);
+    }, 400));
 
     filterGroup.addEventListener('click', function(e) {
         if (e.target.tagName === 'BUTTON') {

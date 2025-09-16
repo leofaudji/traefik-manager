@@ -16,6 +16,8 @@ $id = $matches[1];
 $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
 $limit = ($limit_get == -1) ? 1000000 : $limit_get;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$search = trim($_GET['search'] ?? '');
+$raw = isset($_GET['raw']) && $_GET['raw'] === 'true';
 $filter = $_GET['filter'] ?? 'all'; // 'all', 'running', 'stopped'
 $offset = ($page - 1) * $limit;
 
@@ -31,6 +33,18 @@ try {
     }
     $stmt->close();
 
+    // Fetch all managed stacks for this host to cross-reference
+    // This allows us to link a container back to its manageable stack
+    $stmt_managed = $conn->prepare("SELECT id, stack_name FROM application_stacks WHERE host_id = ?");
+    $stmt_managed->bind_param("i", $id);
+    $stmt_managed->execute();
+    $managed_stacks_result = $stmt_managed->get_result();
+    $managed_stacks_map = [];
+    while ($row = $managed_stacks_result->fetch_assoc()) {
+        $managed_stacks_map[$row['stack_name']] = $row['id'];
+    }
+    $stmt_managed->close();
+
     $dockerClient = new DockerClient($host);
     $containers = $dockerClient->listContainers();
     
@@ -43,7 +57,34 @@ try {
     } else {
         $filteredContainers = $containers;
     }
+
+    // Filter by search term if provided
+    if (!empty($search)) {
+        $filteredContainers = array_filter($filteredContainers, function($c) use ($search) {
+            // Check image name
+            if (stripos($c['Image'], $search) !== false) {
+                return true;
+            }
+            // Check all container names
+            if (!empty($c['Names']) && is_array($c['Names'])) {
+                foreach ($c['Names'] as $name) {
+                    // Remove leading slash from name
+                    if (stripos(ltrim($name, '/'), $search) !== false) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+    }
     $filteredContainers = array_values($filteredContainers); // Re-index array
+
+    // If raw data is requested, return it now before pagination and HTML generation
+    if ($raw) {
+        echo json_encode(['status' => 'success', 'data' => $filteredContainers]);
+        $conn->close();
+        exit;
+    }
 
     // Paginate the filtered array
     $total_items = count($filteredContainers);
@@ -80,21 +121,6 @@ try {
             }
             if (empty($ipAddressHtml)) $ipAddressHtml = '<span class="text-muted small">N/A</span>';
 
-            // Build Volumes/Mounts HTML
-            $volumesHtml = '';
-            if (!empty($cont['Mounts'])) {
-                foreach ($cont['Mounts'] as $mount) {
-                    $source = htmlspecialchars($mount['Source']);
-                    $destination = htmlspecialchars($mount['Destination']);
-                    $type = htmlspecialchars($mount['Type']);
-                    // Shorten long source paths for display
-                    $short_source = strlen($source) > 30 ? '...' . substr($source, -27) : $source;
-                    $volumesHtml .= "<div class='d-block small' data-bs-toggle='tooltip' title='{$type}: {$source} -> {$destination}'><i class='bi bi-hdd-fill me-1'></i> {$short_source}</div>";
-                }
-            } else {
-                $volumesHtml = '<span class="text-muted small">None</span>';
-            }
-
             // Build Networks HTML
             $networksHtml = '';
             if (!empty($cont['NetworkSettings']['Networks'])) {
@@ -106,7 +132,17 @@ try {
                 $networksHtml = '<span class="text-muted small">None</span>';
             }
 
+            // Check if this container belongs to a managed stack
+            $compose_project = $cont['Labels']['com.docker.compose.project'] ?? null;
+            $stack_db_id = null;
+            if ($compose_project && isset($managed_stacks_map[$compose_project])) {
+                $stack_db_id = $managed_stacks_map[$compose_project];
+            }
+
             $actionButtons = '<div class="btn-group" role="group">';
+            // Add the update check button first
+            $actionButtons .= "<button class=\"btn btn-sm btn-outline-secondary update-check-btn\" data-container-id=\"{$cont['Id']}\" " . ($stack_db_id ? "data-stack-id=\"{$stack_db_id}\"" : "") . " title=\"Check for image update\"><i class=\"bi bi-patch-question-fill\"></i></button>";
+
             if ($state === 'running') {
                 $actionButtons .= "<button class=\"btn btn-sm btn-outline-warning container-action-btn\" data-container-id=\"{$cont['Id']}\" data-action=\"restart\" title=\"Restart\"><i class=\"bi bi-arrow-repeat\"></i></button>";
                 $actionButtons .= "<button class=\"btn btn-sm btn-outline-danger container-action-btn\" data-container-id=\"{$cont['Id']}\" data-action=\"stop\" title=\"Stop\"><i class=\"bi bi-stop-fill\"></i></button>";
@@ -116,7 +152,16 @@ try {
             $actionButtons .= "<button class=\"btn btn-sm btn-outline-primary view-logs-btn\" data-bs-toggle=\"modal\" data-bs-target=\"#viewLogsModal\" data-container-id=\"{$cont['Id']}\" data-container-name=\"{$name}\" title=\"View Logs\"><i class=\"bi bi-card-text\"></i></button>";
             $actionButtons .= '</div>';
 
-            $html .= "<tr><td>{$name}</td><td><small>" . htmlspecialchars($cont['Image']) . "</small></td><td><span class=\"badge bg-{$stateBadgeClass}\">{$state}</span></td><td>{$status}</td><td>{$ipAddressHtml}</td><td>{$volumesHtml}</td><td>{$networksHtml}</td><td class=\"text-end\">{$actionButtons}</td></tr>";
+            $html .= "<tr>";
+            $html .= "<td><input class=\"form-check-input container-checkbox\" type=\"checkbox\" value=\"{$cont['Id']}\"></td>";
+            $html .= "<td>{$name}</td>";
+            $html .= "<td><small>" . htmlspecialchars($cont['Image']) . "</small></td>";
+            $html .= "<td><span class=\"badge bg-{$stateBadgeClass}\">{$state}</span></td>";
+            $html .= "<td>{$status}</td>";
+            $html .= "<td>{$ipAddressHtml}</td>";
+            $html .= "<td>{$networksHtml}</td>";
+            $html .= "<td class=\"text-end\">{$actionButtons}</td>";
+            $html .= "</tr>";
         }
     }
 

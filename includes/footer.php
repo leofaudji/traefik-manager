@@ -100,10 +100,15 @@
                     <option value="none">none</option>
                 </select>
             </div>
-            <div class="mb-3 form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="network-attachable" name="attachable" value="1">
-                <label class="form-check-label" for="network-attachable">Attachable</label>
-                <small class="form-text text-muted d-block">Allows standalone containers to connect (for overlay networks).</small>
+            <div id="network-macvlan-container" style="display: none;">
+                <hr>
+                <h6>MACVLAN Options</h6>
+                <div class="mb-3">
+                    <label for="macvlan-parent-input" class="form-label">Parent network card</label>
+                    <input type="text" class="form-control" id="macvlan-parent-input" name="macvlan_parent" placeholder="e.g., eth0" list="macvlan-parent-list">
+                    <datalist id="macvlan-parent-list"></datalist>
+                    <small class="form-text text-muted d-block">The name of the host interface to use for macvlan.</small>
+                </div>
             </div>
             <div id="network-ipam-container" style="display: none;">
                 <hr>
@@ -121,14 +126,10 @@
                     <input type="text" class="form-control" id="ipam-ip_range" name="ipam_ip_range" placeholder="e.g., 172.25.5.0/24">
                 </div>
             </div>
-            <div id="network-macvlan-container" style="display: none;">
-                <hr>
-                <h6>Creation</h6>
-                <div class="mb-3">
-                    <label for="macvlan-parent" class="form-label">Parent network card</label>
-                    <input type="text" class="form-control" id="macvlan-parent" name="macvlan_parent" placeholder="e.g., eth0">
-                    <small class="form-text text-muted d-block">The name of the host interface to use for macvlan.</small>
-                </div>
+            <div class="mb-3 form-check form-switch" id="network-attachable-container" style="display: none;">
+                <input class="form-check-input" type="checkbox" role="switch" id="network-attachable" name="attachable" value="1">
+                <label class="form-check-label" for="network-attachable">Attachable</label>
+                <small class="form-text text-muted d-block">Allows standalone containers to connect.</small>
             </div>
             <hr>
             <h6>Labels</h6>

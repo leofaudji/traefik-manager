@@ -62,10 +62,12 @@ $router->get('/hosts/{id}/details', 'pages/host_dashboard.php', ['auth', 'admin'
 $router->get('/hosts/{id}/containers', 'pages/host_containers.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/stacks', 'pages/host_stacks.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/stacks/new', 'pages/stack_form.php', ['auth', 'admin']);
-$router->get('/hosts/{id}/deploy/git', 'pages/host_deploy_git.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/stacks/{stack_db_id}/edit', 'pages/stack_form.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/stacks/{stack_db_id}/update', 'pages/app_updater.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/deploy/git', 'pages/host_deploy_git.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/networks', 'pages/host_networks.php', ['auth', 'admin']);
 $router->get('/hosts/{id}/images', 'pages/host_images.php', ['auth', 'admin']);
+$router->get('/hosts/{id}/volumes', 'pages/host_volumes.php', ['auth', 'admin']);
 
 // --- API & Action Routes (untuk form submissions dan AJAX) ---
 
@@ -82,15 +84,26 @@ $router->post('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', '
 $router->get('/api/hosts/{host_id}/stacks/{stack_name}/spec', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test', 'api/git_test_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test-compose-path', 'api/git_compose_test_handler.php', ['auth', 'admin']);
-$router->post('/api/app-launcher/preview', 'api/app_launcher_preview_handler.php', ['auth', 'admin']);
 $router->post('/api/app-launcher/deploy', 'api/app_launcher_handler.php', ['auth', 'admin']);
-$router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);
-$router->post('/api/hosts/{id}/deploy/git', 'api/host_deploy_git_handler.php', ['auth', 'admin']);
+$router->post('/api/app-launcher/preview', 'api/app_launcher_preview_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/chart-data', 'api/host_dashboard_chart_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/stats', 'api/host_dashboard_stats_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/networks', 'api/network_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/images', 'api/network_handler.php', ['auth', 'admin']);
+$router->get('/api/hosts/{id}/volumes', 'api/network_handler.php', ['auth', 'admin']);
+$router->get('/api/hosts/{id}/volumes/{name}', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/containers/prune', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/volumes', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/volumes/prune', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/images', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/images/prune', 'api/network_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/networks', 'api/network_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/networks/prune', 'api/network_handler.php', ['auth', 'admin']);
+$router->get('/api/dockerhub/search', 'api/dockerhub_handler.php', ['auth', 'admin']);
+$router->get('/api/dockerhub/tags', 'api/dockerhub_tags_handler.php', ['auth', 'admin']);
+$router->post('/api/hosts/{id}/containers/{container_id}/check-update', 'api/container_update_check_handler.php', ['auth', 'admin']);
+$router->post('/api/webhook/deploy', 'api/webhook_handler.php'); // No auth middleware, security is via token
+$router->post('/api/webhook/regenerate-token', 'api/webhook_token_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/containers/{container_id}/logs', 'api/container_log_handler.php', ['auth', 'admin']);
 $router->post('/api/history/cleanup', 'api/cleanup_handler.php', ['auth', 'admin']);
 $router->post('/api/routers/bulk-move', 'api/router_bulk_handler.php', ['auth', 'admin']);

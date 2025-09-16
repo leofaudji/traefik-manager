@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/GitHelper.php';
 require_once __DIR__ . '/../includes/DockerClient.php';
 require_once __DIR__ . '/../includes/DockerComposeParser.php';
+require_once __DIR__ . '/../includes/AppLauncherHelper.php';
 require_once __DIR__ . '/../includes/Spyc.php';
 
 header('Content-Type: application/json');
@@ -20,7 +21,7 @@ $git = new GitHelper();
 try {
     // --- Input Validation ---
     $host_id = $_POST['host_id'] ?? null;
-    $stack_name = trim($_POST['stack_name'] ?? '');
+    $stack_name = strtolower(trim($_POST['stack_name'] ?? ''));
     $source_type = $_POST['source_type'] ?? 'git';
     $git_url = trim($_POST['git_url'] ?? '');
     $git_branch = trim($_POST['git_branch'] ?? 'main');
@@ -34,13 +35,25 @@ try {
     $volume_path = !empty($_POST['volume_path']) ? trim($_POST['volume_path']) : null;
 
     // Port mapping settings
-    $host_ip = !empty($_POST['host_ip']) ? trim($_POST['host_ip']) : null;
     $host_port = !empty($_POST['host_port']) ? (int)$_POST['host_port'] : null;
     $container_port = !empty($_POST['container_port']) ? (int)$_POST['container_port'] : null;
+    $container_ip = !empty($_POST['container_ip']) ? trim($_POST['container_ip']) : null;
 
     if (empty($host_id) || empty($stack_name)) {
         throw new InvalidArgumentException("Host and Stack Name are required for preview.");
     }
+
+    $form_params = [
+        'stack_name' => $stack_name,
+        'replicas' => $replicas,
+        'cpu' => $cpu,
+        'memory' => $memory,
+        'network' => $network,
+        'volume_path' => $volume_path,
+        'host_port' => $host_port,
+        'container_port' => $container_port,
+        'container_ip' => $container_ip,
+    ];
 
     // --- Get Host Details ---
     $stmt = $conn->prepare("SELECT * FROM docker_hosts WHERE id = ?");
@@ -69,8 +82,9 @@ try {
         $final_compose_path = '';
         $paths_to_try = [];
         if (!empty($compose_path)) $paths_to_try[] = $compose_path;
-        if (!empty($host['default_git_compose_path'])) $paths_to_try[] = $host['default_git_compose_path'];
-        $paths_to_try[] = 'docker-compose.yml';
+        // Path from global settings
+        if (!empty(get_setting('default_git_compose_path'))) $paths_to_try[] = get_setting('default_git_compose_path');
+        $paths_to_try[] = 'docker-compose.yml'; // Final fallback
         $paths_to_try = array_unique($paths_to_try);
 
         foreach ($paths_to_try as $path) {
@@ -89,101 +103,21 @@ try {
         if (empty($base_compose_content)) throw new Exception("Compose file '{$final_compose_path}' is empty.");
 
         $compose_data = DockerComposeParser::YAMLLoad($base_compose_content);
-        
-       if (isset($compose_data['services']) && is_array($compose_data['services'])) {
-            $is_first_service = true;
-            foreach (array_keys($compose_data['services']) as $service_key) {
-                // Apply universal resource limits to all services
-                if ($is_swarm_manager) {
-                    if ($cpu || $memory) {
-                        if (!isset($compose_data['services'][$service_key]['deploy'])) $compose_data['services'][$service_key]['deploy'] = [];
-                        if (!isset($compose_data['services'][$service_key]['deploy']['resources'])) $compose_data['services'][$service_key]['deploy']['resources'] = ['limits' => []];
-                        if ($cpu) $compose_data['services'][$service_key]['deploy']['resources']['limits']['cpus'] = (string)$cpu;
-                        if ($memory) $compose_data['services'][$service_key]['deploy']['resources']['limits']['memory'] = $memory;
-                    }
-                } else {
-                    if ($cpu) $compose_data['services'][$service_key]['cpus'] = (float)$cpu;
-                    if ($memory) $compose_data['services'][$service_key]['mem_limit'] = $memory;
-                }
-
-                // Apply network attachment to all services
-                if ($network) {
-                    if (!isset($compose_data['services'][$service_key]['networks'])) {
-                        $compose_data['services'][$service_key]['networks'] = [];
-                    }
-                    $current_networks = $compose_data['services'][$service_key]['networks'];
-                    $network_exists = false;
-                    if (is_array($current_networks)) {
-                        if (array_key_exists($network, $current_networks) || in_array($network, $current_networks)) {
-                            $network_exists = true;
-                        }
-                    }
-                    if (!$network_exists) {
-                        $compose_data['services'][$service_key]['networks'][] = $network;
-                    }
-                }
-
-                // Apply singular settings only to the FIRST service
-                if ($is_first_service) {
-                    if ($is_swarm_manager && $replicas) {
-                        if (!isset($compose_data['services'][$service_key]['deploy'])) $compose_data['services'][$service_key]['deploy'] = [];
-                        $compose_data['services'][$service_key]['deploy']['replicas'] = $replicas;
-                    }
-                    if ($volume_path) {
-                        $host_volume_path = rtrim($host['default_volume_path'] ?? '/opt/stacks', '/') . '/' . $stack_name . '/data';
-                        if (!isset($compose_data['services'][$service_key]['volumes'])) $compose_data['services'][$service_key]['volumes'] = [];
-                        $compose_data['services'][$service_key]['volumes'][] = $host_volume_path . ':' . $volume_path;
-                    }
-                    if ($host_port && $container_port) {
-                        if (!isset($compose_data['services'][$service_key]['ports'])) $compose_data['services'][$service_key]['ports'] = [];
-                        $port_mapping = ($host_ip ? $host_ip . ':' : '') . $host_port . ':' . $container_port;
-                        $compose_data['services'][$service_key]['ports'][] = $port_mapping;
-                    }
-                    $is_first_service = false;
-                }
-            }
-            if ($network) {
-                if (!isset($compose_data['networks'])) $compose_data['networks'] = [];
-                $compose_data['networks'][$network]['external'] = true;
-            }
-       }
+        AppLauncherHelper::applyFormSettings($compose_data, $form_params, $host, $is_swarm_manager);
         $compose_content = Spyc::YAMLDump($compose_data, 2, 0);
 
     } elseif ($source_type === 'image') {
         $image_name = $_POST['image_name'] ?? '';
         if (empty($image_name)) throw new InvalidArgumentException("Image Name is required for image-based preview.");
+        $form_params['image_name'] = $image_name;
 
-        $compose_data = ['version' => '3.8', 'services' => [], 'networks' => []];
-        $service = ['image' => $image_name];
-
-        if ($is_swarm_manager) {
-            if ($replicas || $cpu || $memory) {
-                $service['deploy'] = [];
-                if ($replicas) $service['deploy']['replicas'] = $replicas;
-                if ($cpu || $memory) {
-                    $service['deploy']['resources'] = ['limits' => []];
-                    if ($cpu) $service['deploy']['resources']['limits']['cpus'] = (string)$cpu;
-                    if ($memory) $service['deploy']['resources']['limits']['memory'] = $memory;
-                }
-            }
-        } else {
-            if ($cpu) $service['cpus'] = (float)$cpu;
-            if ($memory) $service['mem_limit'] = $memory;
-        }
-        if ($network) {
-            $service['networks'] = [$network];
-            $compose_data['networks'][$network] = ['external' => true];
-        }
-        if ($volume_path) {
-            $host_volume_path = rtrim($host['default_volume_path'] ?? '/opt/stacks', '/') . '/' . $stack_name . '/data';
-            $service['volumes'] = [$host_volume_path . ':' . $volume_path];
-        }
-        if ($host_port && $container_port) {
-            $port_mapping = ($host_ip ? $host_ip . ':' : '') . $host_port . ':' . $container_port;
-            $service['ports'] = [$port_mapping];
-        }
-
-        $compose_data['services'][$stack_name] = $service;
+        $compose_data = [
+            'version' => '3.8',
+            'services' => [
+                $stack_name => ['image' => $image_name]
+            ]
+        ];
+        AppLauncherHelper::applyFormSettings($compose_data, $form_params, $host, $is_swarm_manager);
         if (empty($compose_data['networks'])) unset($compose_data['networks']);
 
         $compose_content = Spyc::YAMLDump($compose_data, 2, 0);

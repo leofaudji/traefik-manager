@@ -505,7 +505,7 @@ elseif ($type === 'stacks') {
     $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
 
     // Get data
-    $stmt = $conn->prepare("SELECT * FROM `application_stacks` ORDER BY name ASC LIMIT ? OFFSET ?");
+    $stmt = $conn->prepare("SELECT * FROM `application_stacks` ORDER BY stack_name ASC LIMIT ? OFFSET ?");
     $stmt->bind_param("ii", $limit, $offset);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -513,12 +513,12 @@ elseif ($type === 'stacks') {
     $html = '';
     while ($stack = $result->fetch_assoc()) {
         $html .= '<tr>';
-        $html .= '<td><a href="' . base_url('/stacks/' . $stack['id'] . '/edit') . '">' . htmlspecialchars($stack['name']) . '</a></td>';
+        $html .= '<td><a href="' . base_url('/stacks/' . $stack['id'] . '/edit') . '">' . htmlspecialchars($stack['stack_name']) . '</a></td>';
         $html .= '<td>' . htmlspecialchars($stack['description'] ?? '') . '</td>';
         $html .= '<td>' . $stack['created_at'] . '</td>';
         $html .= '<td class="text-end">';
         $html .= '<a href="' . base_url('/stacks/' . $stack['id'] . '/edit') . '" class="btn btn-sm btn-outline-warning" data-bs-toggle="tooltip" title="Edit Stack"><i class="bi bi-pencil-square"></i></a> ';
-        $html .= '<button class="btn btn-sm btn-outline-danger delete-btn" data-id="' . $stack['id'] . '" data-url="' . base_url('/stacks/' . $stack['id'] . '/delete') . '" data-type="stacks" data-confirm-message="Are you sure you want to delete stack \'' . htmlspecialchars($stack['name']) . '\'?"><i class="bi bi-trash"></i></button>';
+        $html .= '<button class="btn btn-sm btn-outline-danger delete-btn" data-id="' . $stack['id'] . '" data-url="' . base_url('/stacks/' . $stack['id'] . '/delete') . '" data-type="stacks" data-confirm-message="Are you sure you want to delete stack \'' . htmlspecialchars($stack['stack_name']) . '\'?"><i class="bi bi-trash"></i></button>';
         $html .= '</td></tr>';
     }
 

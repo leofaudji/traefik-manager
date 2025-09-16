@@ -1,3 +1,71 @@
+/**
+ * Displays a toast notification.
+ * @param {string} message The message to display.
+ * @param {boolean} isSuccess Whether the toast should be a success or error style.
+ */
+function showToast(message, isSuccess = true) {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
+
+    const toastId = 'toast-' + Date.now();
+    const toastIcon = isSuccess
+        ? '<i class="bi bi-check-circle-fill text-success me-2"></i>'
+        : '<i class="bi bi-x-circle-fill text-danger me-2"></i>';
+
+    const toastHTML = `
+        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                ${toastIcon}
+                <strong class="me-auto">${isSuccess ? 'Sukses' : 'Error'}</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${message}
+            </div>
+        </div>
+    `;
+
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+}
+
+/**
+ * Returns a function, that, as long as it continues to be invoked, will not
+ * be triggered. The function will be called after it stops being called for
+ * N milliseconds.
+ * @param {Function} func The function to debounce.
+ * @param {number} delay The delay in milliseconds.
+ */
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), delay);
+    };
+}
+
+/**
+ * Formats bytes into a human-readable string.
+ * @param {number} bytes The number of bytes.
+ * @param {number} decimals The number of decimal places.
+ * @returns {string} The formatted string.
+ */
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+
 document.addEventListener('DOMContentLoaded', function () {
 
     // --- Sidebar Active Link Logic ---
@@ -30,68 +98,6 @@ document.addEventListener('DOMContentLoaded', function () {
             const isCollapsed = document.body.classList.contains('sidebar-collapsed');
             localStorage.setItem('sidebar-collapsed', isCollapsed);
         });
-    }
-
-    // --- Toast Notification Logic ---
-    const toastContainer = document.getElementById('toast-container');
-    function showToast(message, isSuccess = true) {
-        if (!toastContainer) return;
-
-        const toastId = 'toast-' + Date.now();
-        const toastIcon = isSuccess
-            ? '<i class="bi bi-check-circle-fill text-success me-2"></i>'
-            : '<i class="bi bi-x-circle-fill text-danger me-2"></i>';
-
-        const toastHTML = `
-            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="toast-header">
-                    ${toastIcon}
-                    <strong class="me-auto">${isSuccess ? 'Sukses' : 'Error'}</strong>
-                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-                <div class="toast-body">
-                    ${message}
-                </div>
-            </div>
-        `;
-
-        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-        const toastElement = document.getElementById(toastId);
-        const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
-        toast.show();
-        toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
-    }
-    /**
-     * Returns a function, that, as long as it continues to be invoked, will not
-     * be triggered. The function will be called after it stops being called for
-     * N milliseconds.
-     * @param {Function} func The function to debounce.
-     * @param {number} delay The delay in milliseconds.
-     */
-    function debounce(func, delay) {
-        let timeout;
-        return function(...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), delay);
-        };
-    }
-
-    /**
-     * Formats bytes into a human-readable string.
-     * @param {number} bytes The number of bytes.
-     * @param {number} decimals The number of decimal places.
-     * @returns {string} The formatted string.
-     */
-    function formatBytes(bytes, decimals = 2) {
-        if (!+bytes) return '0 Bytes';
-
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
 
     /**
@@ -463,9 +469,16 @@ document.addEventListener('DOMContentLoaded', function () {
         const searchInput = e.target.closest('input[name^="search_"]');
         if (searchInput) {
             const form = searchInput.closest('.search-form');
+            if (!form) return;
             const type = form.dataset.type;
-            const limit = document.querySelector(`select[name="limit_${type}"]`).value;
-            debouncedSearch(type, limit);
+            if (!type) return;
+
+            const limitSelector = document.querySelector(`select[name="limit_${type}"]`);
+            // This generic handler is only for paginated tables that have a limit selector.
+            if (limitSelector) {
+                const limit = limitSelector.value;
+                debouncedSearch(type, limit);
+            }
         }
     });
 
@@ -618,30 +631,16 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const dockerVersion = host.docker_version !== 'N/A' ? `<span class="badge bg-info">${host.docker_version}</span>` : 'N/A';
                                 const os = host.os !== 'N/A' ? host.os : 'N/A';
 
-                                const cpuUsagePercent = host.cpu_usage_percent !== 'N/A' ? host.cpu_usage_percent : 0;
-                                const memoryUsagePercent = host.memory_usage_percent !== 'N/A' ? host.memory_usage_percent : 0;
-
-                                const cpuUsageHtml = host.status === 'Reachable' ? `
-                                    <div class="progress" role="progressbar" aria-label="CPU usage" aria-valuenow="${cpuUsagePercent}" aria-valuemin="0" aria-valuemax="100" style="height: 20px;">
-                                        <div class="progress-bar" style="width: ${cpuUsagePercent}%">${cpuUsagePercent}%</div>
-                                    </div>
-                                    <small class="text-muted">${host.cpus} vCPUs</small>
-                                ` : 'N/A';
-
-                                const memoryUsageHtml = host.status === 'Reachable' ? `
-                                    <div class="progress" role="progressbar" aria-label="Memory usage" aria-valuenow="${memoryUsagePercent}" aria-valuemin="0" aria-valuemax="100" style="height: 20px;">
-                                        <div class="progress-bar bg-warning" style="width: ${memoryUsagePercent}%">${memoryUsagePercent}%</div>
-                                    </div>
-                                    <small class="text-muted">${formatBytes(host.memory)}</small>
-                                ` : 'N/A';
+                                const totalCpus = host.cpus !== 'N/A' ? `${host.cpus} vCPUs` : 'N/A';
+                                const totalMemory = host.memory !== 'N/A' ? formatBytes(host.memory) : 'N/A';
 
                                 html += `
                                     <tr>
                                         <td><a href="${basePath}/hosts/${host.id}/details">${host.name}</a></td>
                                         <td>${statusBadge}</td>
                                         <td>${containers}</td>
-                                        <td>${cpuUsageHtml}</td>
-                                        <td>${memoryUsageHtml}</td>
+                                        <td>${totalCpus}</td>
+                                        <td>${totalMemory}</td>
                                         <td>${dockerVersion}</td>
                                         <td>${os}</td>
                                         <td class="text-end">
@@ -729,12 +728,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const initialTemplatePage = localStorage.getItem('templates_page') || 1;
         const initialTemplateLimit = localStorage.getItem('templates_limit') || 10;
         loadPaginatedData('templates', initialTemplatePage, initialTemplateLimit);
-    }
-
-    if (document.getElementById('stacks-container')) {
-        const initialStackPage = localStorage.getItem('stacks_page') || 1;
-        const initialStackLimit = localStorage.getItem('stacks_limit') || 10;
-        loadPaginatedData('stacks', initialStackPage, initialStackLimit);
     }
 
     if (document.getElementById('hosts-container')) {

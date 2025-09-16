@@ -15,7 +15,7 @@ $conn = Database::getInstance()->getConnection();
 // --- Main Logic ---
 try {
     // Extract Host ID
-    if (!preg_match('/^\/api\/hosts\/(\d+)\/(networks|images)/', $request_uri_path, $matches)) {
+    if (!preg_match('/^\/api\/hosts\/(\d+)\//', $request_uri_path, $matches)) {
         throw new InvalidArgumentException("Invalid API endpoint format.");
     }
     $host_id = $matches[1];
@@ -34,14 +34,80 @@ try {
 
     // --- Handle different request methods ---
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        // Handle inspect single volume
+        if (preg_match('/^\/api\/hosts\/\d+\/volumes\/([a-zA-Z0-9_.-]+)$/', $request_uri_path, $volume_matches)) {
+            $volume_name = $volume_matches[1];
+            $volume_details = $dockerClient->inspectVolume($volume_name);
+            echo json_encode(['status' => 'success', 'data' => $volume_details]);
+            $conn->close();
+            exit;
+        }
+
         if (str_ends_with($request_uri_path, '/networks')) {
             // LIST networks
             $networks = $dockerClient->listNetworks();
-            echo json_encode(['status' => 'success', 'data' => $networks]);
+            $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+            $limit = ($limit_get == -1) ? 1000000 : $limit_get;
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+
+            $search = trim($_GET['search'] ?? '');
+            if (!empty($search)) {
+                $networks = array_filter($networks, function($net) use ($search) {
+                    if (stripos($net['Name'], $search) !== false) return true;
+                    if (isset($net['IPAM']['Config'][0]['Subnet']) && stripos($net['IPAM']['Config'][0]['Subnet'], $search) !== false) return true;
+                    if (isset($net['IPAM']['Config'][0]['Gateway']) && stripos($net['IPAM']['Config'][0]['Gateway'], $search) !== false) return true;
+                    return false;
+                });
+            }
+
+            $total_items = count($networks);
+            $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
+            $offset = ($page - 1) * $limit;
+            $paginated_networks = array_slice(array_values($networks), $offset, $limit);
+
+            echo json_encode([
+                'status' => 'success', 
+                'data' => $paginated_networks,
+                'total_pages' => $total_pages,
+                'current_page' => $page,
+                'limit' => $limit_get,
+                'info' => "Showing <strong>" . count($paginated_networks) . "</strong> of <strong>{$total_items}</strong> networks."
+            ]);
+        } elseif (str_ends_with($request_uri_path, '/volumes')) {
+            // LIST volumes
+            $volumes = $dockerClient->listVolumes();
+            $volumes_list = $volumes['Volumes'] ?? [];
+            $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+            $limit = ($limit_get == -1) ? 1000000 : $limit_get;
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+
+            $search = trim($_GET['search'] ?? '');
+            if (!empty($search)) {
+                $volumes_list = array_filter($volumes_list, function($vol) use ($search) {
+                    return stripos($vol['Name'], $search) !== false;
+                });
+            }
+
+            $total_items = count($volumes_list);
+            $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
+            $offset = ($page - 1) * $limit;
+            $paginated_volumes = array_slice(array_values($volumes_list), $offset, $limit);
+
+            echo json_encode([
+                'status' => 'success', 
+                'data' => $paginated_volumes,
+                'total_pages' => $total_pages,
+                'current_page' => $page,
+                'limit' => $limit_get,
+                'info' => "Showing <strong>" . count($paginated_volumes) . "</strong> of <strong>{$total_items}</strong> volumes."
+            ]);
         } elseif (str_ends_with($request_uri_path, '/images')) {
             // LIST images
             $url = $host['docker_api_url'];
             $is_socket = strpos($url, 'unix://') === 0;
+            $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+            $limit = ($limit_get == -1) ? 1000000 : $limit_get;
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 
             $ch = curl_init();
             
@@ -80,12 +146,41 @@ try {
             $images_data = json_decode($response, true);
             if (json_last_error() !== JSON_ERROR_NONE) throw new Exception("Failed to decode JSON response from Docker API.");
 
+            $search = trim($_GET['search'] ?? '');
+            if (!empty($search)) {
+                $images_data = array_filter($images_data, function($img) use ($search) {
+                    if (isset($img['RepoTags']) && is_array($img['RepoTags'])) {
+                        foreach ($img['RepoTags'] as $tag) {
+                            if (stripos($tag, $search) !== false) {
+                                return true;
+                            }
+                        }
+                    }
+                    // Also search by image ID
+                    if (isset($img['Id']) && stripos($img['Id'], $search) !== false) {
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
             if (isset($_GET['details']) && $_GET['details'] === 'true') {
                 // Filter out dangling images (<none>:<none>) for the detailed view
                 $detailed_images = array_filter($images_data, function($image) {
                     return !(empty($image['RepoTags']) || $image['RepoTags'][0] === '<none>:<none>');
                 });
-                echo json_encode(['status' => 'success', 'data' => array_values($detailed_images)]);
+                $total_items = count($detailed_images);
+                $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
+                $offset = ($page - 1) * $limit;
+                $paginated_images = array_slice(array_values($detailed_images), $offset, $limit);
+                echo json_encode([
+                    'status' => 'success', 
+                    'data' => $paginated_images,
+                    'total_pages' => $total_pages,
+                    'current_page' => $page,
+                    'limit' => $limit_get,
+                    'info' => "Showing <strong>" . count($paginated_images) . "</strong> of <strong>{$total_items}</strong> images."
+                ]);
             } else {
                 // Original behavior for App Launcher
                 $all_tags = [];
@@ -101,9 +196,118 @@ try {
         }
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Handle prune action on a separate endpoint
+        if (str_ends_with($request_uri_path, '/volumes/prune')) {
+            $prune_result = $dockerClient->pruneVolumes();
+            $space_reclaimed = $prune_result['SpaceReclaimed'] ?? 0;
+            // The formatBytes function is available from bootstrap.php
+            $formatted_space = formatBytes($space_reclaimed); 
+            log_activity($_SESSION['username'], 'Volumes Pruned', "Pruned unused volumes on host '{$host['name']}'. Space reclaimed: {$formatted_space}.");
+            echo json_encode(['status' => 'success', 'message' => "Unused volumes successfully pruned. Space reclaimed: {$formatted_space}."]);
+            $conn->close();
+            exit;
+        }
+
+        // Handle network prune action
+        if (str_ends_with($request_uri_path, '/networks/prune')) {
+            $prune_result = $dockerClient->pruneNetworks();
+            $networks_deleted = $prune_result['NetworksDeleted'] ?? [];
+            $deleted_count = count($networks_deleted);
+
+            log_activity($_SESSION['username'], 'Networks Pruned', "Pruned {$deleted_count} unused networks on host '{$host['name']}'.");
+            echo json_encode(['status' => 'success', 'message' => "Unused networks successfully pruned. {$deleted_count} network(s) removed."]);
+            $conn->close();
+            exit;
+        }
+
+        // Handle image prune action
+        if (str_ends_with($request_uri_path, '/images/prune')) {
+            $prune_result = $dockerClient->pruneImages();
+            $space_reclaimed = $prune_result['SpaceReclaimed'] ?? 0;
+            // The formatBytes function is available from bootstrap.php
+            $formatted_space = formatBytes($space_reclaimed); 
+            log_activity($_SESSION['username'], 'Images Pruned', "Pruned unused images on host '{$host['name']}'. Space reclaimed: {$formatted_space}.");
+            echo json_encode(['status' => 'success', 'message' => "Unused images successfully pruned. Space reclaimed: {$formatted_space}."]);
+            $conn->close();
+            exit;
+        }
+
+        // Handle container prune action
+        if (str_ends_with($request_uri_path, '/containers/prune')) {
+            $prune_result = $dockerClient->pruneContainers();
+            $deleted_count = count($prune_result['ContainersDeleted'] ?? []);
+            $space_reclaimed = $prune_result['SpaceReclaimed'] ?? 0;
+            $formatted_space = formatBytes($space_reclaimed);
+
+            log_activity($_SESSION['username'], 'Containers Pruned', "Pruned {$deleted_count} stopped containers on host '{$host['name']}'. Space reclaimed: {$formatted_space}.");
+            echo json_encode(['status' => 'success', 'message' => "Successfully pruned {$deleted_count} container(s). Space reclaimed: {$formatted_space}."]);
+            $conn->close();
+            exit;
+        }
+
         $action = $_POST['action'] ?? 'create';
 
-        if ($action === 'delete_image') {
+        if ($action === 'pull_image') {
+            // PULL image
+            $image_name = trim($_POST['image_name'] ?? '');
+            if (empty($image_name)) {
+                throw new InvalidArgumentException("Image name is required to pull.");
+            }
+
+            $env_vars = "DOCKER_HOST=" . escapeshellarg($host['docker_api_url']);
+            $docker_config_dir = null; // For cleanup
+            $cert_dir = null; // For cleanup
+            if ($host['tls_enabled']) {
+                if (!file_exists($host['ca_cert_path'])) throw new Exception("CA certificate not found at: {$host['ca_cert_path']}");
+                if (!file_exists($host['client_cert_path'])) throw new Exception("Client certificate not found at: {$host['client_cert_path']}");
+                if (!file_exists($host['client_key_path'])) throw new Exception("Client key not found at: {$host['client_key_path']}");
+
+                $cert_dir = rtrim(sys_get_temp_dir(), '/') . '/docker_certs_' . uniqid();
+                if (!mkdir($cert_dir, 0700, true)) throw new Exception("Could not create temporary cert directory.");
+                
+                copy($host['ca_cert_path'], $cert_dir . '/ca.pem');
+                copy($host['client_cert_path'], $cert_dir . '/cert.pem');
+                copy($host['client_key_path'], $cert_dir . '/key.pem');
+
+                $env_vars .= " DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=" . escapeshellarg($cert_dir);
+            }
+
+            $login_command = '';
+            if (!empty($host['registry_username']) && !empty($host['registry_password'])) {
+                // Use a persistent path from .env if available, otherwise use a temporary one.
+                $docker_config_path_from_env = Config::get('DOCKER_CONFIG_PATH');
+                if (!empty($docker_config_path_from_env)) {
+                    if (!is_dir($docker_config_path_from_env) && !mkdir($docker_config_path_from_env, 0755, true)) {
+                        throw new Exception("Could not create specified DOCKER_CONFIG_PATH: {$docker_config_path_from_env}. Check permissions.");
+                    }
+                    $docker_config_dir = $docker_config_path_from_env;
+                } else {
+                    $docker_config_dir = rtrim(sys_get_temp_dir(), '/') . '/docker_config_' . uniqid();
+                    if (!mkdir($docker_config_dir, 0700, true)) throw new Exception("Could not create temporary docker config directory.");
+                }
+                $env_vars .= " DOCKER_CONFIG=" . escapeshellarg($docker_config_dir);
+                $registry_url = !empty($host['registry_url']) ? escapeshellarg($host['registry_url']) : '';
+                $login_command = "echo " . escapeshellarg($host['registry_password']) . " | docker login {$registry_url} -u " . escapeshellarg($host['registry_username']) . " --password-stdin 2>&1 && ";
+            }
+
+            $pull_command = "docker pull " . escapeshellarg($image_name) . " 2>&1";
+            $script_to_run = $login_command . $pull_command;
+            $full_command = 'env ' . $env_vars . ' sh -c ' . escapeshellarg($script_to_run);
+
+            
+            set_time_limit(300); // 5 minutes
+            exec($full_command, $output, $return_var);
+
+            if (isset($cert_dir) && is_dir($cert_dir)) shell_exec("rm -rf " . escapeshellarg($cert_dir));
+            // Only remove the config directory if it was a temporary one
+            if (empty(Config::get('DOCKER_CONFIG_PATH')) && isset($docker_config_dir) && is_dir($docker_config_dir)) {
+                 shell_exec("rm -rf " . escapeshellarg($docker_config_dir));
+            }
+            if ($return_var !== 0) throw new Exception("Failed to pull image. Output: " . implode("\n", $output));
+
+            log_activity($_SESSION['username'], 'Image Pulled', "Pulled image '{$image_name}' on host '{$host['name']}'.");
+            echo json_encode(['status' => 'success', 'message' => "Image '{$image_name}' pulled successfully."]);
+        } elseif ($action === 'delete_image') {
             // DELETE image
             $image_id = $_POST['image_id'] ?? '';
             if (empty($image_id)) {
@@ -112,6 +316,46 @@ try {
             $dockerClient->removeImage($image_id);
             log_activity($_SESSION['username'], 'Image Deleted', "Deleted image ID '{$image_id}' on host '{$host['name']}'.");
             echo json_encode(['status' => 'success', 'message' => "Image successfully deleted."]);
+        } elseif ($action === 'delete_volume') {
+            // DELETE volume
+            $volume_name = $_POST['volume_name'] ?? '';
+            if (empty($volume_name)) {
+                throw new InvalidArgumentException("Volume name is required for deletion.");
+            }
+            $dockerClient->removeVolume($volume_name);
+            log_activity($_SESSION['username'], 'Volume Deleted', "Deleted volume '{$volume_name}' on host '{$host['name']}'.");
+            echo json_encode(['status' => 'success', 'message' => "Volume successfully deleted."]);
+        } elseif ($action === 'create_volume') {
+            // CREATE volume
+            $name = trim($_POST['name'] ?? '');
+            if (empty($name)) {
+                throw new InvalidArgumentException("Volume name is required.");
+            }
+
+            $config = ['Name' => $name];
+            if (!empty($_POST['driver'])) {
+                $config['Driver'] = $_POST['driver'];
+            }
+
+            if (!empty($_POST['driver_opts']) && is_array($_POST['driver_opts'])) {
+                $opts = [];
+                foreach ($_POST['driver_opts'] as $opt) {
+                    if (!empty($opt['key']) && isset($opt['value'])) $opts[$opt['key']] = $opt['value'];
+                }
+                if (!empty($opts)) $config['DriverOpts'] = $opts;
+            }
+
+            if (!empty($_POST['labels']) && is_array($_POST['labels'])) {
+                $labels = [];
+                foreach ($_POST['labels'] as $label) {
+                    if (!empty($label['key']) && isset($label['value'])) $labels[$label['key']] = $label['value'];
+                }
+                if (!empty($labels)) $config['Labels'] = $labels;
+            }
+
+            $dockerClient->createVolume($config);
+            log_activity($_SESSION['username'], 'Volume Created', "Created volume '{$name}' on host '{$host['name']}'.");
+            echo json_encode(['status' => 'success', 'message' => "Volume '{$name}' created successfully."]);
         } elseif ($action === 'create') {
             // CREATE network
             $name = trim($_POST['name'] ?? '');

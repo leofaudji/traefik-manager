@@ -67,7 +67,9 @@ class DockerComposeParser {
 
             if ($this->isArrayElement($line)) {
                 $value = trim(substr($line, strpos($line, '-') + 1));
-                if ($this->isHashElement($value)) {
+                // A list item is a map only if it contains a colon followed by a space.
+                // This distinguishes `key: value` from unquoted strings like `8080:80`.
+                if (strpos($value, ': ') !== false) {
                     $data[] = $this->parseHashElement($value, $this_indent);
                 } else {
                     $data[] = $this->parseLiteral($value);

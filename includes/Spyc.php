@@ -391,8 +391,8 @@ class Spyc {
       // Use literal block for multi-line strings
       $value_indent = $indent + $this->_dumpIndent;
       $value = "|-\n" . str_repeat(' ', $value_indent) . $this->LiteralPlaceHolder . str_replace("\n", "\n" . str_repeat(' ', $value_indent), $value);
-    } elseif (($key === 'version' && !is_array($value) && $value !== null) || // Force 'version' to be a string.
-        (is_string($value) && ((strpos($value, ":") !== false || strpos($value, "- ") !== false || // Quote strings with colons (ports, volumes) or starting with a dash.
+    } elseif (($key === 'version' && !is_array($value) && $value !== null) || // Force 'version' to be a string
+        (is_string($value) && ((strpos($value, ":") !== false || strpos($value, "- ") !== false || strpos($value, " ") !== false || // Quote strings with colons, starting dash, or spaces
         strpos($value, "*") !== false || strpos($value, "#") !== false || strpos($value, "<") !== false || strpos($value, ">") !== false || strpos($value, "!") !== false ||
         strpos($value, "[") !== false || strpos($value, "]") !== false || strpos($value, "{") !== false || strpos($value, "}") !== false) || substr($value, -1, 1) == ':')))
     {
