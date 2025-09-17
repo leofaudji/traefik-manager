@@ -12,6 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     $git_url = trim($_POST['git_url'] ?? '');
+    $ssh_key_path = trim($_POST['ssh_key_path'] ?? null); // Get optional SSH key from POST
 
     if (empty($git_url)) {
         throw new InvalidArgumentException("Git URL is required.");
@@ -25,7 +26,8 @@ try {
     }
 
     $git = new GitHelper();
-    $git->testConnection($git_url); // This will throw on failure
+    // Pass the key path from the form to the test function
+    $git->testConnection($git_url, $ssh_key_path);
 
     echo json_encode(['status' => 'success', 'message' => 'Successfully connected to the repository.']);
 

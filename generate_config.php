@@ -24,15 +24,18 @@ try {
 
     if ($git_enabled) {
         $git = new GitHelper();
-        $repo_path = $git->setupRepository(); // This will clone or pull the repo into a temp directory
+        $repo_path = $git->setupRepository(); // This will clone or pull the repo
 
         // Write Traefik config to the repo
         $traefik_file_path = $repo_path . '/' . basename(YAML_OUTPUT_PATH);
         file_put_contents($traefik_file_path, $traefik_yaml_output);
 
         $commit_message = "Deploy configuration from Config Manager by " . ($_SESSION['username'] ?? 'system');
-        $git->commitAndPush($commit_message); // The helper will now add all changes
-        $git->cleanup(); // Remove the temporary repository directory
+        $git->commitAndPush($repo_path, $commit_message); // The helper will now add all changes
+        // Clean up only if it's a temporary path
+        if (!$git->isPersistentPath($repo_path)) {
+            $git->cleanup($repo_path);
+        }
         $deploy_message = 'Konfigurasi berhasil di-push ke Git repository.';
     } else {
         // Fallback to writing only the Traefik config to a local file

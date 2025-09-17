@@ -28,7 +28,6 @@ Format file ini didasarkan pada [Keep a Changelog](https://keepachangelog.com/en
 ### Changed
 - **UI Refinements**: Tombol "Preview Config" dipindahkan dari header utama ke halaman "Routers" untuk alur kerja yang lebih kontekstual.
 - **App Updater**: Halaman "Update Application" telah didesain ulang sepenuhnya agar konsisten dengan fungsionalitas dan UI App Launcher yang baru.
-- **Resource Limits**: Batasan CPU dan Memori yang diisi di form App Launcher kini akan selalu menimpa (replace) nilai yang ada di file `docker-compose.yml` asli.
 
 ### Removed
 - **Import YAML**: Fitur "Import YAML" dihapus dari header utama untuk menyederhanakan antarmuka.

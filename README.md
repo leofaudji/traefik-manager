@@ -2,21 +2,30 @@
 
 Config Manager adalah aplikasi web sederhana yang dibangun menggunakan PHP Native dan MySQL untuk mengelola file konfigurasi dinamis (misalnya untuk Traefik Proxy). Aplikasi ini menyediakan antarmuka dashboard modern untuk melakukan operasi CRUD (Create, Read, Update, Delete) pada data konfigurasi dan menghasilkan file YAML akhir.
 
-## Fitur
+## Fitur Utama
 
-- **Dashboard Terpusat**: Lihat semua router, service, dan server dalam satu halaman.
-- **Manajemen Konfigurasi**: Alur kerja terpadu untuk menambah, mengedit, dan menghapus konfigurasi.
+- **Manajemen Konfigurasi Traefik**:
+  - Antarmuka CRUD untuk **Routers**, **Services**, dan **Middlewares**.
+  - **Pratinjau & Deploy**: Lihat pratinjau file YAML yang akan dihasilkan, lengkap dengan validasi, lalu deploy langsung dari UI.
+  - **Riwayat & Perbandingan**: Simpan setiap versi deployment, lihat perbedaannya, dan kembalikan ke versi sebelumnya.
+- **Manajemen Host & Kontainer**:
+  - Kelola beberapa host Docker (standalone atau Swarm) dari satu tempat.
+  - Lihat, mulai, hentikan, dan restart kontainer.
+  - **Live Stats**: Pantau penggunaan CPU & Memori kontainer secara real-time.
+  - Kelola images, networks, dan volumes dengan mudah, termasuk fitur "prune" untuk membersihkan sumber daya yang tidak terpakai.
+- **App Launcher**:
+  - Deploy aplikasi dari repositori **Git**, **image yang sudah ada** di host, atau dari **Docker Hub**.
+  - **Build On-Host**: Opsi untuk membangun image dari `Dockerfile` langsung di host tujuan.
+  - Konfigurasi dinamis untuk port, volume, network, dan sumber daya.
+  - Log deployment real-time untuk melacak proses.
 - **Manajemen Grup**: Halaman khusus untuk membuat, mengubah, dan menghapus grup untuk mengorganisir router dan service.
 - **Fitur Kloning**: Duplikasi Router atau Service yang sudah ada dengan satu klik untuk mempercepat pembuatan konfigurasi serupa.
 - **UI Modern & Responsif**: Dibangun dengan Bootstrap 5 untuk pengalaman pengguna yang baik di berbagai perangkat.
-- **Generator Konfigurasi**: Hasilkan file `*.yml` yang siap pakai berdasarkan data di database.
-- **Pratinjau & Deploy**: Lihat pratinjau file YAML yang akan dihasilkan dari data saat ini, lalu deploy langsung dari modal pratinjau.
-- **Konfigurasi Service Lanjutan**: Pilih metode Load Balancer (misalnya, `roundRobin`, `leastConn`) untuk setiap service.
 - **Validasi Duplikat**: Mencegah pembuatan router atau service dengan nama yang sama.
-- **Aman**: Menggunakan prepared statements untuk mencegah SQL Injection.
-- **Keamanan Web Server**: Konfigurasi `.htaccess` untuk memblokir akses ke file sensitif seperti `.env`.
+- **Integritas & Backup Git**:
+  - **Generate & Deploy**: Secara otomatis men-deploy konfigurasi Traefik ke repositori Git.
+  - **Sync Stacks**: Sinkronkan dan backup semua file `docker-compose.yml` dari stack yang Anda deploy ke repositori Git.
 - **Integritas Data**: Menjaga konsistensi data dengan pembaruan dan penghapusan yang aman (cascading updates & protected deletes).
-- **Riwayat Deployment**: Menyimpan setiap versi konfigurasi yang di-deploy ke dalam database untuk audit.
 - **Dependensi Minimal**: Hanya memerlukan satu file library eksternal (`Spyc.php`) untuk fungsionalitas YAML.
 - **Interaksi AJAX**: Operasi CRUD menggunakan AJAX untuk pemrosesan di latar belakang. Aksi hapus memberikan umpan balik instan, sementara aksi simpan akan kembali ke halaman utama dengan pesan status yang jelas.
 

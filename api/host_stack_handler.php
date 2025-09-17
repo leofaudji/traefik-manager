@@ -101,6 +101,8 @@ try {
         $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
         $limit = ($limit_get == -1) ? 1000000 : $limit_get;
         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        $sort = $_GET['sort'] ?? 'Name';
+        $order = $_GET['order'] ?? 'asc';
         $is_swarm_manager = (isset($dockerInfo['Swarm']['ControlAvailable']) && $dockerInfo['Swarm']['ControlAvailable'] === true);
         $discovered_stacks = [];
 
@@ -163,22 +165,37 @@ try {
             }, ARRAY_FILTER_USE_BOTH);
         }
 
+        $discovered_stacks = array_values($discovered_stacks); // Convert to indexed array for sorting
+
+        // Sort the data
+        usort($discovered_stacks, function($a, $b) use ($sort, $order) {
+            $valA = $a[$sort] ?? null;
+            $valB = $b[$sort] ?? null;
+
+            if ($sort === 'CreatedAt') {
+                $valA = strtotime($valA);
+                $valB = strtotime($valB);
+            }
+
+            $comparison = strnatcasecmp((string)$valA, (string)$valB);
+            return ($order === 'asc') ? $comparison : -$comparison;
+        });
+
         // Paginate the results
         $total_items = count($discovered_stacks);
         $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
         $offset = ($page - 1) * $limit;
-        $paginated_stacks = array_slice($discovered_stacks, $offset, $limit, true); // Keep keys
+        $paginated_stacks = array_slice($discovered_stacks, $offset, $limit);
 
         $stacks = [];
-        foreach ($paginated_stacks as $stack_name => $stack_data) {
+        foreach ($paginated_stacks as $stack_data) {
             $stacks[] = [
-                'ID' => $stack_name, // Use the name as the ID. For Swarm, this is the stack name, not the ID from the /stacks endpoint.
-                'Name' => $stack_name,
+                'ID' => $stack_data['Name'],
+                'Name' => $stack_data['Name'],
                 'Services' => $stack_data['Services'],
                 'CreatedAt' => $stack_data['CreatedAt'],
                 'DbId' => $stack_data['DbId'] ?? null,
-                'SourceType' => $stack_data['SourceType'] ?? null,
-                'Description' => 'Stack deployed directly on the host.'
+                'SourceType' => $stack_data['SourceType'] ?? null
             ];
         }
 

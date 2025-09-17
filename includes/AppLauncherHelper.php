@@ -17,7 +17,7 @@ class AppLauncherHelper
         $cpu = $params['cpu'] ?? null;
         $memory = $params['memory'] ?? null;
         $network = $params['network'] ?? null;
-        $volume_path = $params['volume_path'] ?? null;
+        $volume_paths = $params['volume_paths'] ?? [];
         $host_port = $params['host_port'] ?? null;
         $container_port = $params['container_port'] ?? null;
         $container_ip = $params['container_ip'] ?? null;
@@ -28,18 +28,50 @@ class AppLauncherHelper
         }
 
         $is_first_service = true;
+        $num_services = count($compose_data['services']);
         foreach (array_keys($compose_data['services']) as $service_key) {
-            // Apply universal resource limits to all services
+            // Apply universal settings to all services
             if ($is_swarm_manager) {
-                if ($cpu || $memory) {
-                    if (!isset($compose_data['services'][$service_key]['deploy'])) $compose_data['services'][$service_key]['deploy'] = [];
-                    if (!isset($compose_data['services'][$service_key]['deploy']['resources'])) $compose_data['services'][$service_key]['deploy']['resources'] = ['limits' => []];
-                    if ($cpu) $compose_data['services'][$service_key]['deploy']['resources']['limits']['cpus'] = (string)$cpu;
-                    if ($memory) $compose_data['services'][$service_key]['deploy']['resources']['limits']['memory'] = $memory;
+                // Ensure deploy section exists
+                if (!isset($compose_data['services'][$service_key]['deploy'])) {
+                    $compose_data['services'][$service_key]['deploy'] = [];
                 }
+
+                // Set/replace resource limits from form
+                $compose_data['services'][$service_key]['deploy']['resources']['limits']['cpus'] = (string)$cpu;
+                $compose_data['services'][$service_key]['deploy']['resources']['limits']['memory'] = $memory;
+
+                // Set/replace restart policy
+                $compose_data['services'][$service_key]['deploy']['restart_policy'] = [
+                    'condition' => 'any'
+                ];
+            } else { // Standalone host
+                // Set/replace resource limits from form
+                $compose_data['services'][$service_key]['cpus'] = (float)$cpu;
+                $compose_data['services'][$service_key]['mem_limit'] = $memory;
+
+                // Set/replace restart policy
+                $compose_data['services'][$service_key]['restart'] = 'unless-stopped';
+            }
+
+            // For standalone hosts, explicitly set the container name.
+            // This avoids the default "{project}_{service}_1" naming convention.
+            // This is not recommended for Swarm as it conflicts with scaling.
+            if (!$is_swarm_manager) {
+                // If there's only one service, name the container after the stack. Otherwise, name it after the service key.
+                if ($num_services === 1) {
+                    $compose_data['services'][$service_key]['container_name'] = $stack_name;
+                } else {
+                    $compose_data['services'][$service_key]['container_name'] = $service_key;
+                }
+            }
+
+            // Also set the hostname. This is generally safe.
+            // For single service apps, it matches the stack name. For multi-service, it matches the service key to avoid conflicts.
+            if ($num_services === 1) {
+                $compose_data['services'][$service_key]['hostname'] = $stack_name;
             } else {
-                if ($cpu) $compose_data['services'][$service_key]['cpus'] = (float)$cpu;
-                if ($memory) $compose_data['services'][$service_key]['mem_limit'] = $memory;
+                $compose_data['services'][$service_key]['hostname'] = $service_key;
             }
 
             // Apply network attachment to all services
@@ -75,27 +107,34 @@ class AppLauncherHelper
                     if (!isset($compose_data['services'][$service_key]['deploy'])) $compose_data['services'][$service_key]['deploy'] = [];
                     $compose_data['services'][$service_key]['deploy']['replicas'] = $replicas;
                 }
-                if ($volume_path) {
-                    $host_volume_path = rtrim($host['default_volume_path'] ?? '/opt/stacks', '/') . '/' . $stack_name;
-                    // Ensure the container path is absolute to prevent Docker errors.
-                    if (!str_starts_with($volume_path, '/')) {
-                        $volume_path = '/' . $volume_path;
+
+            // --- Volume Mapping ---
+            if (!empty($volume_paths) && is_array($volume_paths)) {
+                foreach ($volume_paths as $volume_map) {
+                    $container_path = $volume_map['container'] ?? null;
+                    $host_path = $volume_map['host'] ?? null;
+
+                    if ($container_path && $host_path) {
+                        if (!str_starts_with($container_path, '/')) {
+                            $container_path = '/' . $container_path;
+                        }
+                        $suffix = preg_replace('/[^\w.-]+/', '_', trim($container_path, '/'));
+                        $volume_name = preg_replace('/[^a-zA-Z0-9_.-]/', '', $stack_name) . '_' . ($suffix ?: 'data');
+
+                        if (!isset($compose_data['services'][$service_key]['volumes'])) $compose_data['services'][$service_key]['volumes'] = [];
+                        $compose_data['services'][$service_key]['volumes'][] = $volume_name . ':' . $container_path;
+
+                        if (!isset($compose_data['volumes'])) $compose_data['volumes'] = [];
+                        $compose_data['volumes'][$volume_name] = [
+                            'driver' => 'local',
+                            'driver_opts' => [
+                                'type' => 'none',
+                                'o' => 'bind',
+                                'device' => $host_path,
+                            ],
+                        ];
                     }
-                    // Generate a clean volume name from the stack name
-                    $volume_name = preg_replace('/[^a-zA-Z0-9_.-]/', '', $stack_name) . '_data';
-
-                    if (!isset($compose_data['services'][$service_key]['volumes'])) $compose_data['services'][$service_key]['volumes'] = [];
-                    $compose_data['services'][$service_key]['volumes'][] = $volume_name . ':' . $volume_path;
-
-                    if (!isset($compose_data['volumes'])) $compose_data['volumes'] = [];
-                    $compose_data['volumes'][$volume_name] = [
-                        'driver' => 'local',
-                        'driver_opts' => [
-                            'type' => 'none',
-                            'o' => 'bind',
-                            'device' => $host_volume_path,
-                        ],
-                    ];
+                    }
                 }
                 // Handle port mapping. If a container port is provided in the form, it overrides any existing ports.
                 if ($container_port) {

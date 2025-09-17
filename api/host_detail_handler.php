@@ -19,6 +19,8 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $search = trim($_GET['search'] ?? '');
 $raw = isset($_GET['raw']) && $_GET['raw'] === 'true';
 $filter = $_GET['filter'] ?? 'all'; // 'all', 'running', 'stopped'
+$sort = $_GET['sort'] ?? 'Name';
+$order = $_GET['order'] ?? 'asc';
 $offset = ($page - 1) * $limit;
 
 $conn = Database::getInstance()->getConnection();
@@ -78,6 +80,24 @@ try {
         });
     }
     $filteredContainers = array_values($filteredContainers); // Re-index array
+
+    // Sort the data
+    usort($filteredContainers, function($a, $b) use ($sort, $order) {
+        $valA = null;
+        $valB = null;
+
+        if ($sort === 'Name') {
+            $valA = $a['Names'][0] ?? '';
+            $valB = $b['Names'][0] ?? '';
+        } else {
+            $valA = $a[$sort] ?? null;
+            $valB = $b[$sort] ?? null;
+        }
+
+        $comparison = strnatcasecmp((string)$valA, (string)$valB);
+        return ($order === 'asc') ? $comparison : -$comparison;
+    });
+
 
     // If raw data is requested, return it now before pagination and HTML generation
     if ($raw) {
@@ -146,6 +166,7 @@ try {
             if ($state === 'running') {
                 $actionButtons .= "<button class=\"btn btn-sm btn-outline-warning container-action-btn\" data-container-id=\"{$cont['Id']}\" data-action=\"restart\" title=\"Restart\"><i class=\"bi bi-arrow-repeat\"></i></button>";
                 $actionButtons .= "<button class=\"btn btn-sm btn-outline-danger container-action-btn\" data-container-id=\"{$cont['Id']}\" data-action=\"stop\" title=\"Stop\"><i class=\"bi bi-stop-fill\"></i></button>";
+                $actionButtons .= "<button class=\"btn btn-sm btn-outline-info live-stats-btn\" data-bs-toggle=\"modal\" data-bs-target=\"#liveStatsModal\" data-container-id=\"{$cont['Id']}\" data-container-name=\"{$name}\" title=\"Live Stats\"><i class=\"bi bi-bar-chart-line-fill\"></i></button>";
             } else {
                 $actionButtons .= "<button class=\"btn btn-sm btn-outline-success container-action-btn\" data-container-id=\"{$cont['Id']}\" data-action=\"start\" title=\"Start\"><i class=\"bi bi-play-fill\"></i></button>";
             }

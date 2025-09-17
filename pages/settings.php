@@ -92,6 +92,20 @@ require_once __DIR__ . '/../includes/header.php';
                         <small class="form-text text-muted">Default path to the compose file within a Git repository (e.g., `deploy/docker-compose.yml`).</small>
                     </div>
                 </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="temp_directory_path" class="form-label">Temporary Directory Path</label>
+                        <input type="text" class="form-control" id="temp_directory_path" name="temp_directory_path" value="<?= htmlspecialchars($settings['temp_directory_path'] ?? sys_get_temp_dir()) ?>">
+                        <small class="form-text text-muted">Base path for temporary files, like Git clones. Must be writable by the web server.</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="git_persistent_repo_path" class="form-label">Git Persistent Repo Path (Optional)</label>
+                        <input type="text" class="form-control" id="git_persistent_repo_path" name="git_persistent_repo_path" value="<?= htmlspecialchars($settings['git_persistent_repo_path'] ?? '') ?>" placeholder="/opt/config-manager/repo">
+                        <small class="form-text text-muted">Path to store a persistent Git clone. Improves performance by pulling instead of re-cloning. Leave blank to use temporary directories.</small>
+                    </div>
+                </div>
             </div>
 
             <hr>
@@ -107,8 +121,11 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="row">
                     <div class="col-md-12">
                         <div class="mb-3">
-                            <label for="git_repository_url" class="form-label">Repository URL (SSH)</label>
-                            <input type="text" class="form-control" id="git_repository_url" name="git_repository_url" value="<?= htmlspecialchars($settings['git_repository_url'] ?? '') ?>" placeholder="e.g., git@github.com:user/repo.git">
+                            <label for="git_repository_url" class="form-label">Repository URL (HTTPS or SSH)</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="git_repository_url" name="git_repository_url" value="<?= htmlspecialchars($settings['git_repository_url'] ?? '') ?>" placeholder="e.g., git@github.com:user/repo.git or https://github.com/user/repo.git">
+                                <button class="btn btn-outline-secondary" type="button" id="test-git-settings-btn">Test Connection</button>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -122,6 +139,13 @@ require_once __DIR__ . '/../includes/header.php';
                             <label for="git_ssh_key_path" class="form-label">Absolute Path to SSH Private Key</label>
                             <input type="text" class="form-control" id="git_ssh_key_path" name="git_ssh_key_path" value="<?= htmlspecialchars($settings['git_ssh_key_path'] ?? '/var/www/.ssh/id_rsa') ?>">
                             <small class="form-text text-muted">Required for cloning repositories using SSH URLs (e.g., `git@...`).</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="git_pat" class="form-label">Personal Access Token (for HTTPS)</label>
+                            <input type="password" class="form-control" id="git_pat" name="git_pat" value="<?= htmlspecialchars($settings['git_pat'] ?? '') ?>" placeholder="Enter token for HTTPS repos">
+                            <small class="form-text text-muted">Required for cloning private repositories using HTTPS URLs. Leave username blank and use the token as the password.</small>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -176,6 +200,41 @@ document.addEventListener('DOMContentLoaded', function() {
     gitToggle.addEventListener('change', function() {
         gitContainer.style.display = this.checked ? 'block' : 'none';
     });
+
+    const testGitBtn = document.getElementById('test-git-settings-btn');
+    if (testGitBtn) {
+        testGitBtn.addEventListener('click', function() {
+            const gitUrl = document.getElementById('git_repository_url').value.trim();
+            const sshKeyPath = document.getElementById('git_ssh_key_path').value.trim();
+
+            if (!gitUrl) {
+                showToast('Please provide a Git Repository URL to test.', false);
+                return;
+            }
+
+            const originalBtnText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Testing...`;
+
+            const formData = new FormData();
+            formData.append('git_url', gitUrl);
+            formData.append('ssh_key_path', sshKeyPath); // Send the key path from the form
+
+            fetch('<?= base_url('/api/git/test') ?>', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                showToast(data.message, ok);
+            })
+            .catch(error => showToast(error.message || 'An unknown error occurred.', false))
+            .finally(() => {
+                this.disabled = false;
+                this.innerHTML = originalBtnText;
+            });
+        });
+    }
 
     const regenerateBtn = document.getElementById('regenerate-webhook-token-btn');
     if (regenerateBtn) {

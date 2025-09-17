@@ -58,10 +58,11 @@ require_once __DIR__ . '/../includes/host_nav.php';
                 <thead>
                     <tr>
                         <th><input class="form-check-input" type="checkbox" id="select-all-images" title="Select all images"></th>
-                        <th>Tag</th>
-                        <th>ID</th>
-                        <th>Size</th>
-                        <th>Created</th>
+                        <th class="sortable asc" data-sort="RepoTags">Tag</th>
+                        <th>Used By</th>
+                        <th class="sortable" data-sort="Id">ID</th>
+                        <th class="sortable" data-sort="Size">Size</th>
+                        <th class="sortable" data-sortCreated">Created</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -170,9 +171,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const paginationContainer = document.getElementById('images-pagination');
     const infoContainer = document.getElementById('images-info');
     const limitSelector = document.getElementById('images-limit-selector');
+    const tableHeader = document.querySelector('#images-container').closest('table').querySelector('thead');
 
     let currentPage = 1;
     let currentLimit = 10;
+    let currentSort = 'RepoTags';
+    let currentOrder = 'asc';
 
     function reloadCurrentView() {
         loadImages(parseInt(currentPage), parseInt(currentLimit));
@@ -184,10 +188,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalBtnContent = refreshImagesBtn.innerHTML;
         refreshImagesBtn.disabled = true;
         refreshImagesBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing...`;
-        imagesContainer.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
+        imagesContainer.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const searchTerm = imageSearchInput.value.trim();
-        fetch(`${basePath}/api/hosts/${hostId}/images?details=true&search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`)
+        fetch(`${basePath}/api/hosts/${hostId}/images?details=true&search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}&sort=${currentSort}&order=${currentOrder}`)
             .then(response => response.json())
             .then(result => {
                 if (result.status === 'error') throw new Error(result.message);
@@ -201,13 +205,23 @@ document.addEventListener('DOMContentLoaded', function() {
                         const size = formatBytes(img.Size);
                         const created = new Date(img.Created * 1000).toLocaleString();
                         const isUnused = img.Containers <= 0; // An image is unused if container count is 0 or -1 (for dangling)
+                        const usedByStacks = img.UsedByStacks || [];
                         
                         const unusedBadge = isUnused ? ' <span class="badge bg-secondary">Unused</span>' : '';
 
-                        html += `<tr><td><input class="form-check-input image-checkbox" type="checkbox" value="${img.Id}" data-name="${img.RepoTags ? img.RepoTags[0] : id}"></td><td>${tagsHtml}${unusedBadge}</td><td><code>${id}</code></td><td>${size}</td><td>${created}</td><td class="text-end"><button class="btn btn-sm btn-outline-danger delete-image-btn" data-image-id="${img.Id}" data-image-name="${img.RepoTags ? img.RepoTags[0] : id}" title="Remove Image"><i class="bi bi-trash"></i></button></td></tr>`;
+                        let usedByHtml = '';
+                        if (usedByStacks.length > 0) {
+                            usedByHtml = usedByStacks.map(stackName => 
+                                `<a href="${basePath}/hosts/${hostId}/stacks" class="badge bg-primary text-decoration-none me-1" data-bs-toggle="tooltip" title="Used by '${stackName}' stack">${stackName}</a>`
+                            ).join('');
+                        } else if (!isUnused) {
+                            usedByHtml = '<span class="badge bg-secondary" data-bs-toggle="tooltip" title="Used by a standalone container not managed by this application.">Standalone</span>';
+                        }
+
+                        html += `<tr><td><input class="form-check-input image-checkbox" type="checkbox" value="${img.Id}" data-name="${img.RepoTags ? img.RepoTags[0] : id}"></td><td>${tagsHtml}${unusedBadge}</td><td>${usedByHtml}</td><td><code>${id}</code></td><td>${size}</td><td>${created}</td><td class="text-end"><button class="btn btn-sm btn-outline-danger delete-image-btn" data-image-id="${img.Id}" data-image-name="${img.RepoTags ? img.RepoTags[0] : id}" title="Remove Image"><i class="bi bi-trash"></i></button></td></tr>`;
                     });
                 } else {
-                    html = '<tr><td colspan="6" class="text-center">No images found on this host.</td></tr>';
+                    html = '<tr><td colspan="7" class="text-center">No images found on this host.</td></tr>';
                 }
                 imagesContainer.innerHTML = html;
                 infoContainer.innerHTML = result.info;
@@ -229,13 +243,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_images_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_images_limit`, result.limit);
 
+                // Update sort indicators in header
+                tableHeader.querySelectorAll('th.sortable').forEach(th => {
+                    th.classList.remove('asc', 'desc');
+                    if (th.dataset.sort === currentSort) {
+                        th.classList.add(currentOrder);
+                    }
+                });
+
+                // Re-initialize tooltips for the new content
+                const tooltipTriggerList = imagesContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
+                [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
             })
-            .catch(error => imagesContainer.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Failed to load images: ${error.message}</td></tr>`)
+            .catch(error => imagesContainer.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load images: ${error.message}</td></tr>`)
             .finally(() => {
                 refreshImagesBtn.disabled = false;
                 refreshImagesBtn.innerHTML = originalBtnContent;
             });
     }
+
+    tableHeader.addEventListener('click', function(e) {
+        const th = e.target.closest('th.sortable');
+        if (!th) return;
+
+        const sortField = th.dataset.sort;
+        if (currentSort === sortField) {
+            currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = sortField;
+            currentOrder = 'asc';
+        }
+        localStorage.setItem(`host_${hostId}_images_sort`, currentSort);
+        localStorage.setItem(`host_${hostId}_images_order`, currentOrder);
+        loadImages(1, limitSelector.value);
+    });
 
     refreshImagesBtn.addEventListener('click', reloadCurrentView);
 
@@ -617,6 +659,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function initialize() {
         const initialPage = parseInt(localStorage.getItem(`host_${hostId}_images_page`)) || 1;
         const initialLimit = parseInt(localStorage.getItem(`host_${hostId}_images_limit`)) || 10;
+        currentSort = localStorage.getItem(`host_${hostId}_images_sort`) || 'RepoTags';
+        currentOrder = localStorage.getItem(`host_${hostId}_images_order`) || 'asc';
         
         limitSelector.value = initialLimit;
 

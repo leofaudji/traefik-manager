@@ -81,8 +81,10 @@ $router->get('/api/templates/{id}', 'api/template_handler.php', ['auth', 'admin'
 $router->get('/api/hosts/{id}/containers', 'api/host_detail_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->post('/api/hosts/{id}/stacks', 'api/host_stack_handler.php', ['auth', 'admin']);
+$router->get('/api/hosts/{id}/containers/{container_id}/stats', 'api/container_stats_stream_handler.php', ['auth', 'admin']);
 $router->get('/api/hosts/{host_id}/stacks/{stack_name}/spec', 'api/host_stack_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test', 'api/git_test_handler.php', ['auth', 'admin']);
+$router->post('/api/stacks/sync-to-git', 'api/sync_stacks_to_git_handler.php', ['auth', 'admin']);
 $router->post('/api/git/test-compose-path', 'api/git_compose_test_handler.php', ['auth', 'admin']);
 $router->post('/api/app-launcher/deploy', 'api/app_launcher_handler.php', ['auth', 'admin']);
 $router->post('/api/app-launcher/preview', 'api/app_launcher_preview_handler.php', ['auth', 'admin']);
@@ -144,7 +146,6 @@ $router->post('/history/{id}/deploy', 'actions/deploy_config.php', ['auth', 'adm
 $router->get('/history/{id}/content', 'actions/get_history_content.php', ['auth', 'admin']);
 $router->get('/history/{id}/download', 'actions/download_history.php', ['auth', 'admin']);
 $router->post('/history/{id}/archive', 'actions/archive_history.php', ['auth', 'admin']);
-$router->post('/import', 'actions/import_yaml.php', ['auth', 'admin']);
 
 // Jalankan router
 $router->dispatch();

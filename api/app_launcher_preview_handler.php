@@ -32,7 +32,7 @@ try {
     $cpu = !empty($_POST['deploy_cpu']) ? $_POST['deploy_cpu'] : null;
     $memory = !empty($_POST['deploy_memory']) ? $_POST['deploy_memory'] : null;
     $network = !empty($_POST['network_name']) ? $_POST['network_name'] : null;
-    $volume_path = !empty($_POST['volume_path']) ? trim($_POST['volume_path']) : null;
+    $volume_paths = isset($_POST['volume_paths']) && is_array($_POST['volume_paths']) ? $_POST['volume_paths'] : [];
 
     // Port mapping settings
     $host_port = !empty($_POST['host_port']) ? (int)$_POST['host_port'] : null;
@@ -43,13 +43,22 @@ try {
         throw new InvalidArgumentException("Host and Stack Name are required for preview.");
     }
 
+    // Validate that if volume mappings are provided, the container path is not empty
+    if (!empty($volume_paths)) {
+        foreach ($volume_paths as $index => $volume_map) {
+            if (empty(trim($volume_map['container'] ?? ''))) {
+                throw new Exception("Container Path is required for all volume mappings. Please check volume mapping #" . ($index + 1) . ".");
+            }
+        }
+    }
+
     $form_params = [
         'stack_name' => $stack_name,
         'replicas' => $replicas,
         'cpu' => $cpu,
         'memory' => $memory,
         'network' => $network,
-        'volume_path' => $volume_path,
+        'volume_paths' => $volume_paths,
         'host_port' => $host_port,
         'container_port' => $container_port,
         'container_ip' => $container_ip,
@@ -106,9 +115,16 @@ try {
         AppLauncherHelper::applyFormSettings($compose_data, $form_params, $host, $is_swarm_manager);
         $compose_content = Spyc::YAMLDump($compose_data, 2, 0);
 
-    } elseif ($source_type === 'image') {
-        $image_name = $_POST['image_name'] ?? '';
-        if (empty($image_name)) throw new InvalidArgumentException("Image Name is required for image-based preview.");
+    } elseif ($source_type === 'image' || $source_type === 'hub') {
+        $image_name = '';
+        if ($source_type === 'image') {
+            $image_name = $_POST['image_name_local'] ?? '';
+            if (empty($image_name)) throw new InvalidArgumentException("Image Name from local host is required for preview.");
+        } else { // hub
+            $image_name = $_POST['image_name_hub'] ?? '';
+            if (empty($image_name)) throw new InvalidArgumentException("Image Name from Docker Hub is required for preview.");
+        }
+        
         $form_params['image_name'] = $image_name;
 
         $compose_data = [

@@ -46,6 +46,8 @@ try {
         if (str_ends_with($request_uri_path, '/networks')) {
             // LIST networks
             $networks = $dockerClient->listNetworks();
+            $sort = $_GET['sort'] ?? 'Name';
+            $order = $_GET['order'] ?? 'asc';
             $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
             $limit = ($limit_get == -1) ? 1000000 : $limit_get;
             $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -77,6 +79,8 @@ try {
             // LIST volumes
             $volumes = $dockerClient->listVolumes();
             $volumes_list = $volumes['Volumes'] ?? [];
+            $sort = $_GET['sort'] ?? 'Name';
+            $order = $_GET['order'] ?? 'asc';
             $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
             $limit = ($limit_get == -1) ? 1000000 : $limit_get;
             $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -88,10 +92,27 @@ try {
                 });
             }
 
+            // Convert to indexed array for sorting
+            $volumes_list = array_values($volumes_list);
+
+            // Sort the data
+            usort($volumes_list, function($a, $b) use ($sort, $order) {
+                $valA = $a[$sort] ?? null;
+                $valB = $b[$sort] ?? null;
+
+                if ($sort === 'CreatedAt') {
+                    $valA = strtotime($valA ?? '');
+                    $valB = strtotime($valB ?? '');
+                }
+
+                $comparison = strnatcasecmp((string)$valA, (string)$valB);
+                return ($order === 'asc') ? $comparison : -$comparison;
+            });
+
             $total_items = count($volumes_list);
             $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
             $offset = ($page - 1) * $limit;
-            $paginated_volumes = array_slice(array_values($volumes_list), $offset, $limit);
+            $paginated_volumes = array_slice($volumes_list, $offset, $limit);
 
             echo json_encode([
                 'status' => 'success', 
@@ -105,6 +126,8 @@ try {
             // LIST images
             $url = $host['docker_api_url'];
             $is_socket = strpos($url, 'unix://') === 0;
+            $sort = $_GET['sort'] ?? 'RepoTags';
+            $order = $_GET['order'] ?? 'asc';
             $limit_get = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
             $limit = ($limit_get == -1) ? 1000000 : $limit_get;
             $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -164,11 +187,48 @@ try {
                 });
             }
 
+            usort($images_data, function($a, $b) use ($sort, $order) {
+                $valA = $a[$sort] ?? null;
+                $valB = $b[$sort] ?? null;
+
+                if ($sort === 'RepoTags') {
+                    $valA = $a['RepoTags'][0] ?? 'z'; // Put <none> at the end
+                    $valB = $b['RepoTags'][0] ?? 'z';
+                }
+
+                $comparison = strnatcasecmp((string)$valA, (string)$valB);
+                return ($order === 'asc') ? $comparison : -$comparison;
+            });
+
             if (isset($_GET['details']) && $_GET['details'] === 'true') {
                 // Filter out dangling images (<none>:<none>) for the detailed view
                 $detailed_images = array_filter($images_data, function($image) {
                     return !(empty($image['RepoTags']) || $image['RepoTags'][0] === '<none>:<none>');
                 });
+
+                // --- Get all containers to map images to stacks ---
+                $all_containers = $dockerClient->listContainers();
+                $image_to_stack_map = [];
+                foreach ($all_containers as $container) {
+                    $image_id = $container['ImageID'] ?? null;
+                    $stack_name = $container['Labels']['com.docker.compose.project'] ?? null;
+                    if ($image_id && $stack_name) {
+                        if (!isset($image_to_stack_map[$image_id])) {
+                            $image_to_stack_map[$image_id] = [];
+                        }
+                        // Add stack name if it's not already in the list for this image
+                        if (!in_array($stack_name, $image_to_stack_map[$image_id], true)) {
+                            $image_to_stack_map[$image_id][] = $stack_name;
+                        }
+                    }
+                }
+
+                // Add the stack usage data to each image object
+                foreach ($detailed_images as &$image) { // Use reference to modify
+                    $image['UsedByStacks'] = $image_to_stack_map[$image['Id']] ?? [];
+                }
+                unset($image); // Unset reference
+
                 $total_items = count($detailed_images);
                 $total_pages = ($limit_get == -1) ? 1 : ceil($total_items / $limit);
                 $offset = ($page - 1) * $limit;

@@ -25,6 +25,9 @@ try {
         'git_user_name' => trim($_POST['git_user_name'] ?? 'Config Manager'),
         'git_user_email' => trim($_POST['git_user_email'] ?? 'bot@config-manager.local'),
         'git_ssh_key_path' => trim($_POST['git_ssh_key_path'] ?? ''),
+        'git_pat' => trim($_POST['git_pat'] ?? ''),
+        'temp_directory_path' => rtrim(trim($_POST['temp_directory_path'] ?? sys_get_temp_dir()), '/'),
+        'git_persistent_repo_path' => rtrim(trim($_POST['git_persistent_repo_path'] ?? ''), '/'),
     ];
 
     // Use INSERT ... ON DUPLICATE KEY UPDATE for a safe upsert

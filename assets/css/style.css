@@ -262,3 +262,46 @@ body.dark-mode .text-muted {
         box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     }
 }
+
+/* assets/css/style.css */
+
+/* ... (CSS yang sudah ada) ... */
+
+.table thead th.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 1.5rem; /* Make space for arrows */
+}
+
+.table thead th.sortable::after,
+.table thead th.sortable::before {
+    content: '';
+    position: absolute;
+    right: 0.5rem;
+    font-size: 0.8em;
+    opacity: 0.2;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.table thead th.sortable::before {
+    content: '▲';
+    top: 50%;
+    transform: translateY(-120%);
+}
+
+.table thead th.sortable::after {
+    content: '▼';
+    top: 50%;
+    transform: translateY(20%);
+}
+
+.table thead th.sortable:hover::before,
+.table thead th.sortable:hover::after {
+    opacity: 0.6;
+}
+
+.table thead th.sortable.asc::before,
+.table thead th.sortable.desc::after {
+    opacity: 1;
+    color: var(--cf-blue);
+}

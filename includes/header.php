@@ -86,8 +86,7 @@
         </button>
         <div class="d-flex align-items-center">
             <?php if ($_SESSION['role'] === 'admin'): ?>
-             <button type="button" class="btn btn-secondary me-2" id="preview-config-btn"><i class="bi bi-eye"></i> Preview Config</button>
-             <button class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#importModal"><i class="bi bi-upload"></i> Import YAML</button>
+             <button type="button" class="btn btn-dark me-2" id="sync-stacks-btn"><i class="bi bi-git"></i> Sync Stacks to Git</button>
              <a href="<?= base_url('/generate') ?>" class="btn btn-success"><i class="bi bi-rocket-takeoff"></i> Generate & Deploy</a>
             <?php endif; ?>
             <div class="nav-item dropdown ms-3">

@@ -57,10 +57,10 @@ require_once __DIR__ . '/../includes/host_nav.php';
                 <thead>
                     <tr>
                         <th><input class="form-check-input" type="checkbox" id="select-all-stacks" title="Select all stacks"></th>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th>Services</th>
-                        <th>Created At</th>
+                        <th class="sortable asc" data-sort="Name">Name</th>
+                        <th class="sortable" data-sort="SourceType">Source</th>
+                        <th class="sortable" data-sort="Services">Services</th>
+                        <th class="sortable" data-sort="CreatedAt">Created At</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -116,9 +116,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const paginationContainer = document.getElementById('stacks-pagination');
     const infoContainer = document.getElementById('stacks-info');
     const limitSelector = document.getElementById('stacks-limit-selector');
+    const tableHeader = document.querySelector('#stacks-container').closest('table').querySelector('thead');
 
     let currentPage = 1;
     let currentLimit = 10;
+    let currentSort = 'Name';
+    let currentOrder = 'asc';
 
     function reloadCurrentView() {
         loadStacks(parseInt(currentPage), parseInt(currentLimit));
@@ -130,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
         stacksContainer.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const searchTerm = searchInput.value.trim();
-        fetch(`${basePath}/api/hosts/${hostId}/stacks?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`)
+        fetch(`${basePath}/api/hosts/${hostId}/stacks?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}&sort=${currentSort}&order=${currentOrder}`)
             .then(response => response.json())
             .then(result => {
                 if (result.status === 'error') throw new Error(result.message);
@@ -141,6 +144,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     result.data.forEach(stack => {
                         const stackDbId = stack.DbId;
                         const sourceType = stack.SourceType;
+                        let sourceHtml = '<span class="badge bg-secondary" data-bs-toggle="tooltip" title="Discovered on host (unmanaged)."><i class="bi bi-question-circle"></i> Unknown</span>';
+
+                        if (sourceType === 'git') {
+                            sourceHtml = '<span class="badge bg-dark" data-bs-toggle="tooltip" title="Deployed from a Git repository."><i class="bi bi-github me-1"></i> Git</span>';
+                        } else if (sourceType === 'image') {
+                            sourceHtml = '<span class="badge bg-primary" data-bs-toggle="tooltip" title="Deployed from an existing image on the host."><i class="bi bi-hdd-stack-fill me-1"></i> Host Image</span>';
+                        } else if (sourceType === 'hub') {
+                            sourceHtml = '<span class="badge bg-info text-dark" data-bs-toggle="tooltip" title="Deployed from a Docker Hub image."><i class="bi bi-box-seam me-1"></i> Docker Hub</span>';
+                        } else if (sourceType === 'builder') {
+                            sourceHtml = '<span class="badge bg-success" data-bs-toggle="tooltip" title="Created with the Stack Builder form."><i class="bi bi-tools me-1"></i> Builder</span>';
+                        }
 
                         let updateButton = '';
                         if (stackDbId) {
@@ -155,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         html += `<tr>
                                     <td><input class="form-check-input stack-checkbox" type="checkbox" value="${stack.Name}"></td>
                                     <td><a href="#" class="view-stack-spec-btn" data-bs-toggle="modal" data-bs-target="#viewStackSpecModal" data-stack-name="${stack.Name}">${stack.Name}</a></td>
-                                    <td>${stack.Description || ''}</td>
+                                    <td>${sourceHtml}</td>
                                     <td>${stack.Services}</td>
                                     <td>${new Date(stack.CreatedAt).toLocaleString()}</td>
                                     <td class="text-end">
@@ -169,6 +183,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     html = '<tr><td colspan="6" class="text-center">No stacks found on this host.</td></tr>';
                 }
                 stacksContainer.innerHTML = html;
+                // Re-initialize tooltips for the new content
+                const tooltipTriggerList = stacksContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
+                [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
                 infoContainer.innerHTML = result.info;
 
                 // Build pagination
@@ -187,6 +204,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Save state
                 localStorage.setItem(`host_${hostId}_stacks_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_stacks_limit`, result.limit);
+
+                // Update sort indicators in header
+                tableHeader.querySelectorAll('th.sortable').forEach(th => {
+                    th.classList.remove('asc', 'desc');
+                    if (th.dataset.sort === currentSort) {
+                        th.classList.add(currentOrder);
+                    }
+                });
 
                 // --- UI Clarification for Standalone Hosts ---
                 // Change button text and tooltips to reflect their actual function on standalone hosts.
@@ -212,6 +237,22 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             loadStacks(parseInt(pageLink.dataset.page), limitSelector.value);
         }
+    });
+
+    tableHeader.addEventListener('click', function(e) {
+        const th = e.target.closest('th.sortable');
+        if (!th) return;
+
+        const sortField = th.dataset.sort;
+        if (currentSort === sortField) {
+            currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = sortField;
+            currentOrder = 'asc';
+        }
+        localStorage.setItem(`host_${hostId}_stacks_sort`, currentSort);
+        localStorage.setItem(`host_${hostId}_stacks_order`, currentOrder);
+        loadStacks(1, limitSelector.value);
     });
 
     limitSelector.addEventListener('change', function() {
@@ -282,58 +323,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
     stacksContainer.addEventListener('click', function(e) {
         const deleteBtn = e.target.closest('.delete-stack-btn');
-        if (!deleteBtn) return;
-        
-        const stackName = deleteBtn.dataset.stackName;
+        const specBtn = e.target.closest('.view-stack-spec-btn');
 
-        if (!confirm(`Are you sure you want to delete the stack "${stackName}" from the host? This action cannot be undone.`)) return;
+        if (specBtn) {
+            e.preventDefault();
+        }
 
-        const formData = new FormData();
-        formData.append('action', 'delete');
-        formData.append('stack_name', stackName);
+        if (deleteBtn) {
+            const stackName = deleteBtn.dataset.stackName;
+            if (!confirm(`Are you sure you want to delete the stack "${stackName}" from the host? This action cannot be undone.`)) return;
 
-        fetch(`${basePath}/api/hosts/${hostId}/stacks`, { method: 'POST', body: formData })
-            .then(response => response.json().then(data => ({ ok: response.ok, data })))
-            .then(({ ok, data }) => {
-                showToast(data.message, ok);
-                if (ok) reloadCurrentView();
+            const formData = new FormData();
+            formData.append('action', 'delete');
+            formData.append('stack_name', stackName);
+
+            fetch(`${basePath}/api/hosts/${hostId}/stacks`, { method: 'POST', body: formData })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    showToast(data.message, ok);
+                    if (ok) reloadCurrentView();
+                });
+        }
+    });
+
+    // Handle the "View Spec" modal using event delegation for robustness
+    document.body.addEventListener('show.bs.modal', function(event) {
+        // Check if the modal being shown is the one we care about
+        if (event.target.id !== 'viewStackSpecModal') {
+            return;
+        }
+
+        const modal = event.target;
+        const button = event.relatedTarget;
+        const contentContainer = modal.querySelector('#stack-spec-content-container');
+        const modalLabel = modal.querySelector('#viewStackSpecModalLabel');
+
+        // Ensure all required elements are present before proceeding
+        if (!button || !contentContainer || !modalLabel) {
+            console.error('Modal or its components are missing.');
+            if(contentContainer) contentContainer.textContent = 'Error: Modal components not found.';
+            return;
+        }
+
+        const stackName = button.dataset.stackName;
+        modalLabel.textContent = `Specification for Stack: ${stackName}`;
+        contentContainer.textContent = 'Loading...';
+
+        fetch(`${basePath}/api/hosts/${hostId}/stacks/${stackName}/spec`)
+            .then(response => response.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    contentContainer.textContent = result.content;
+                    Prism.highlightElement(contentContainer);
+                } else {
+                    throw new Error(result.message);
+                }
+            })
+            .catch(error => {
+                contentContainer.textContent = `Error: ${error.message}`;
             });
     });
-
-    stacksContainer.addEventListener('click', function(e) {
-        const specBtn = e.target.closest('.view-stack-spec-btn');
-        if (specBtn) e.preventDefault();
-    });
-
-    const viewStackSpecModal = document.getElementById('viewStackSpecModal');
-    if (viewStackSpecModal) {
-        const contentContainer = document.getElementById('stack-spec-content-container');
-        const modalLabel = document.getElementById('viewStackSpecModalLabel');
-
-        viewStackSpecModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const stackName = button.dataset.stackName;
-
-            modalLabel.textContent = `Specification for Stack: ${stackName}`;
-            contentContainer.textContent = 'Loading...';
-
-            fetch(`${basePath}/api/hosts/${hostId}/stacks/${stackName}/spec`)
-                .then(response => response.json())
-                .then(result => {
-                    if (result.status === 'success') {
-                        contentContainer.textContent = result.content;
-                        Prism.highlightElement(contentContainer);
-                    } else {
-                        throw new Error(result.message);
-                    }
-                })
-                .catch(error => contentContainer.textContent = `Error: ${error.message}`);
-        });
-    }
 
     function initialize() {
         const initialPage = parseInt(localStorage.getItem(`host_${hostId}_stacks_page`)) || 1;
         const initialLimit = parseInt(localStorage.getItem(`host_${hostId}_stacks_limit`)) || 10;
+        currentSort = localStorage.getItem(`host_${hostId}_stacks_sort`) || 'Name';
+        currentOrder = localStorage.getItem(`host_${hostId}_stacks_order`) || 'asc';
         
         limitSelector.value = initialLimit;
 

@@ -12,6 +12,7 @@ require_once __DIR__ . '/../includes/header.php';
     <h1 class="h2"><i class="bi bi-sign-turn-right"></i> Routers</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <?php if ($_SESSION['role'] === 'admin'): ?>
+        <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="preview-config-btn"><i class="bi bi-eye"></i> Preview Config</button>
         <a href="<?= base_url('/routers/new') ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-circle"></i> Add New Router</a>
         <?php endif; ?>
     </div>
@@ -46,9 +47,6 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endwhile; ?>
             </select>
             <a href="<?= base_url('/services') ?>" class="btn btn-info btn-sm me-2"><i class="bi bi-hdd-stack-fill"></i> Manage Services</a>
-            <?php if ($_SESSION['role'] === 'admin'): ?>
-            <a href="<?= base_url('/configurations/new') ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> Tambah Konfigurasi</a>
-            <?php endif; ?>
         </div>
     </div>
     <div class="card-body card-body-scrollable">

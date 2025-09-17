@@ -11,34 +11,6 @@
     <!-- Toasts will be appended here by JavaScript -->
 </div>
 
-<!-- Import Modal -->
-<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="importModalLabel">Import Konfigurasi YAML</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form id="import-form" enctype="multipart/form-data">
-            <div class="alert alert-info">
-                <strong>Info:</strong> Proses ini akan menghapus konfigurasi saat ini di database dan menggantinya dengan isi dari file. Konfigurasi yang diimpor akan disimpan sebagai <strong>draft baru</strong> di riwayat dan **tidak akan** langsung aktif.
-            </div>
-            <div class="mb-3">
-                <label for="yamlFile" class="form-label">Pilih file .yml atau .yaml</label>
-                <input class="form-control" type="file" id="yamlFile" name="yamlFile" accept=".yml,.yaml" required>
-            </div>
-            <div id="import-error-message" class="alert alert-danger d-none"></div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-        <button type="button" class="btn btn-primary" id="upload-yaml-btn">Import as New Draft</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- View History Modal -->
 <div class="modal fade" id="viewHistoryModal" tabindex="-1" aria-labelledby="viewHistoryModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">

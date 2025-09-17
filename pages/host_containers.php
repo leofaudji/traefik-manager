@@ -61,10 +61,10 @@ require_once __DIR__ . '/../includes/host_nav.php';
                 <thead>
                     <tr>
                         <th><input class="form-check-input" type="checkbox" id="select-all-containers" title="Select all containers"></th>
-                        <th>Name</th>
-                        <th>Image</th>
-                        <th>State</th>
-                        <th>Status</th>
+                        <th class="sortable asc" data-sort="Name">Name</th>
+                        <th class="sortable" data-sort="Image">Image</th>
+                        <th class="sortable" data-sort="State">State</th>
+                        <th data-sort="Status">Status</th>
                         <th>IP Address</th>
                         <th>Networks</th>
                         <th class="text-end">Actions</th>
@@ -92,6 +92,37 @@ require_once __DIR__ . '/../includes/host_nav.php';
     </div>
 </div>
 
+<!-- Live Stats Modal -->
+<div class="modal fade" id="liveStatsModal" tabindex="-1" aria-labelledby="liveStatsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="liveStatsModalLabel">Live Stats</h5>
+        <div class="ms-auto d-flex align-items-center">
+            <label for="stats-refresh-rate" class="form-label me-2 mb-0 small">Refresh Rate:</label>
+            <select id="stats-refresh-rate" class="form-select form-select-sm" style="width: auto;">
+                <option value="5000" selected>5 Seconds</option>
+                <option value="30000">30 Seconds</option>
+                <option value="60000">60 Seconds</option>
+            </select>
+        </div>
+        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+            <div class="col-md-6">
+                <canvas id="cpuChart"></canvas>
+            </div>
+            <div class="col-md-6">
+                <canvas id="memoryChart"></canvas>
+            </div>
+        </div>
+        <div id="stats-error-message" class="alert alert-danger mt-3 d-none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const hostId = <?= $id ?>;
@@ -108,10 +139,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const bulkActionsContainer = document.getElementById('bulk-actions-container');
     const checkAllUpdatesBtn = document.getElementById('check-all-updates-btn');
     const selectAllCheckbox = document.getElementById('select-all-containers');
+    const tableHeader = document.querySelector('#containers-container').closest('table').querySelector('thead');
 
     let currentFilter = localStorage.getItem(`host_${hostId}_containers_filter`) || 'all';
     let currentPage = 1;
     let currentLimit = 10;
+    let currentSort = 'Name';
+    let currentOrder = 'asc';
 
     function reloadCurrentView() {
         loadContainers(parseInt(currentPage), parseInt(currentLimit));
@@ -126,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
         containerBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const searchTerm = searchInput.value.trim();
-        const fetchUrl = `${basePath}/api/hosts/${hostId}/containers?page=${page}&limit=${limit}&filter=${currentFilter}&search=${encodeURIComponent(searchTerm)}`;
+        const fetchUrl = `${basePath}/api/hosts/${hostId}/containers?page=${page}&limit=${limit}&filter=${currentFilter}&search=${encodeURIComponent(searchTerm)}&sort=${currentSort}&order=${currentOrder}`;
 
         fetch(fetchUrl)
             .then(response => response.json())
@@ -153,6 +187,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_containers_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_containers_limit`, result.limit);
                 localStorage.setItem(`host_${hostId}_containers_filter`, currentFilter);
+
+                // Update sort indicators in header
+                tableHeader.querySelectorAll('th.sortable').forEach(th => {
+                    th.classList.remove('asc', 'desc');
+                    if (th.dataset.sort === currentSort) {
+                        th.classList.add(currentOrder);
+                    }
+                });
             }).catch(error => containerBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Failed to load containers: ${error.message}</td></tr>`)
             .finally(() => {
                 refreshBtn.disabled = false;
@@ -344,6 +386,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    tableHeader.addEventListener('click', function(e) {
+        const th = e.target.closest('th.sortable');
+        if (!th) return;
+
+        const sortField = th.dataset.sort;
+        if (currentSort === sortField) {
+            currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = sortField;
+            currentOrder = 'asc';
+        }
+        localStorage.setItem(`host_${hostId}_containers_sort`, currentSort);
+        localStorage.setItem(`host_${hostId}_containers_order`, currentOrder);
+        loadContainers(1, limitSelector.value);
+    });
+
     searchForm.addEventListener('submit', function(e) {
         e.preventDefault();
         loadContainers(1, limitSelector.value);
@@ -449,10 +507,112 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // --- Live Stats Modal Logic ---
+    const liveStatsModalEl = document.getElementById('liveStatsModal');
+    if (liveStatsModalEl) {
+        let eventSource = null;
+        let cpuChart = null;
+        let memoryChart = null;
+        let currentRefreshRate = 5000; // Default to 5 seconds
+        let lastUpdateTime = 0;
+        const refreshRateSelector = document.getElementById('stats-refresh-rate');
+
+        const createChart = (ctx, label) => {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderWidth: 1,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true } },
+                    animation: { duration: 200 }
+                }
+            });
+        };
+
+        const addDataToChart = (chart, label, data) => {
+            chart.data.labels.push(label);
+            chart.data.datasets[0].data.push(data);
+            // Limit the number of data points to keep the chart clean
+            if (chart.data.labels.length > 30) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update();
+        };
+
+        liveStatsModalEl.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const containerId = button.dataset.containerId;
+            const containerName = button.dataset.containerName;
+
+            // Reset and set up refresh rate logic
+            lastUpdateTime = 0;
+            refreshRateSelector.value = 5000; // Reset to default
+            currentRefreshRate = parseInt(refreshRateSelector.value, 10);
+            refreshRateSelector.onchange = () => { currentRefreshRate = parseInt(refreshRateSelector.value, 10); };
+
+            document.getElementById('liveStatsModalLabel').textContent = `Live Stats for: ${containerName}`;
+            document.getElementById('stats-error-message').classList.add('d-none');
+
+            // Initialize charts
+            if (cpuChart) cpuChart.destroy();
+            if (memoryChart) memoryChart.destroy();
+            cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), 'CPU Usage (%)');
+            memoryChart = createChart(document.getElementById('memoryChart').getContext('2d'), 'Memory Usage (MB)');
+
+            // Start streaming
+            eventSource = new EventSource(`${basePath}/api/hosts/${hostId}/containers/${containerId}/stats`);
+
+            eventSource.onmessage = function(e) {
+                const now = Date.now();
+                // Throttle the chart update based on the selected refresh rate
+                if (now - lastUpdateTime < currentRefreshRate) {
+                    return;
+                }
+                lastUpdateTime = now;
+
+                const stats = JSON.parse(e.data);
+                if (stats.error) {
+                    document.getElementById('stats-error-message').textContent = stats.error;
+                    document.getElementById('stats-error-message').classList.remove('d-none');
+                    eventSource.close();
+                    return;
+                }
+                addDataToChart(cpuChart, stats.timestamp, stats.cpu_percent);
+                addDataToChart(memoryChart, stats.timestamp, (stats.memory_usage / 1024 / 1024).toFixed(2));
+            };
+
+            eventSource.onerror = function() {
+                document.getElementById('stats-error-message').textContent = 'Connection to stats stream lost. Please close and reopen.';
+                document.getElementById('stats-error-message').classList.remove('d-none');
+                eventSource.close();
+            };
+        });
+
+        liveStatsModalEl.addEventListener('hidden.bs.modal', function() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        });
+    }
+
     // --- Initial Load ---
     function initialize() {
         const initialPage = parseInt(localStorage.getItem(`host_${hostId}_containers_page`)) || 1;
         const initialLimit = parseInt(localStorage.getItem(`host_${hostId}_containers_limit`)) || 10;
+        currentSort = localStorage.getItem(`host_${hostId}_containers_sort`) || 'Name';
+        currentOrder = localStorage.getItem(`host_${hostId}_containers_order`) || 'asc';
         
         filterGroup.querySelector('.active')?.classList.remove('active');
         filterGroup.querySelector(`button[data-filter="${currentFilter}"]`)?.classList.add('active');

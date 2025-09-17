@@ -58,10 +58,10 @@ require_once __DIR__ . '/../includes/host_nav.php';
                 <thead>
                     <tr>
                         <th><input class="form-check-input" type="checkbox" id="select-all-volumes" title="Select all volumes"></th>
-                        <th>Name</th>
-                        <th>Driver</th>
-                        <th>Mountpoint</th>
-                        <th>Created</th>
+                        <th class="sortable asc" data-sort="Name">Name</th>
+                        <th class="sortable" data-sort="Driver">Driver</th>
+                        <th class="sortable" data-sort="Mountpoint">Mountpoint</th>
+                        <th class="sortable" data-sort="CreatedAt">Created</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -170,9 +170,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const paginationContainer = document.getElementById('volumes-pagination');
     const infoContainer = document.getElementById('volumes-info');
     const limitSelector = document.getElementById('volumes-limit-selector');
+    const tableHeader = document.querySelector('#volumes-container').closest('table').querySelector('thead');
 
     let currentPage = 1;
     let currentLimit = 10;
+    let currentSort = 'Name';
+    let currentOrder = 'asc';
 
     function reloadCurrentView() {
         loadVolumes(parseInt(currentPage), parseInt(currentLimit));
@@ -187,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
         volumesContainer.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const searchTerm = searchInput.value.trim();
-        fetch(`${basePath}/api/hosts/${hostId}/volumes?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`)
+        fetch(`${basePath}/api/hosts/${hostId}/volumes?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}&sort=${currentSort}&order=${currentOrder}`)
             .then(response => response.json())
             .then(result => {
                 if (result.status === 'error') throw new Error(result.message);
@@ -242,6 +245,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_volumes_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_volumes_limit`, result.limit);
 
+                // Update sort indicators in header
+                tableHeader.querySelectorAll('th.sortable').forEach(th => {
+                    th.classList.remove('asc', 'desc');
+                    if (th.dataset.sort === currentSort) {
+                        th.classList.add(currentOrder);
+                    }
+                });
+
             })
             .catch(error => volumesContainer.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Failed to load volumes: ${error.message}</td></tr>`)
             .finally(() => {
@@ -251,6 +262,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     refreshBtn.addEventListener('click', reloadCurrentView);
+
+    tableHeader.addEventListener('click', function(e) {
+        const th = e.target.closest('th.sortable');
+        if (!th) return;
+
+        const sortField = th.dataset.sort;
+        if (currentSort === sortField) {
+            currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = sortField;
+            currentOrder = 'asc';
+        }
+        localStorage.setItem(`host_${hostId}_volumes_sort`, currentSort);
+        localStorage.setItem(`host_${hostId}_volumes_order`, currentOrder);
+        loadVolumes(1, limitSelector.value);
+    });
 
     searchForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -494,6 +521,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function initialize() {
         const initialPage = parseInt(localStorage.getItem(`host_${hostId}_volumes_page`)) || 1;
         const initialLimit = parseInt(localStorage.getItem(`host_${hostId}_volumes_limit`)) || 10;
+        currentSort = localStorage.getItem(`host_${hostId}_volumes_sort`) || 'Name';
+        currentOrder = localStorage.getItem(`host_${hostId}_volumes_order`) || 'asc';
         
         limitSelector.value = initialLimit;
 

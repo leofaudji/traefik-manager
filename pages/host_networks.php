@@ -58,10 +58,10 @@ require_once __DIR__ . '/../includes/host_nav.php';
                 <thead>
                     <tr>
                         <th><input class="form-check-input" type="checkbox" id="select-all-networks" title="Select all networks"></th>
-                        <th>Name</th>
+                        <th class="sortable asc" data-sort="Name">Name</th>
                         <th>ID</th>
-                        <th>Driver</th>
-                        <th>Scope</th>
+                        <th class="sortable" data-sort="Driver">Driver</th>
+                        <th class="sortable" data-sort="Scope">Scope</th>
                         <th>IP Network (Subnet)</th>
                         <th>Gateway</th>
                         <th>Connected Containers</th>
@@ -104,10 +104,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const paginationContainer = document.getElementById('networks-pagination');
     const infoContainer = document.getElementById('networks-info');
     const limitSelector = document.getElementById('networks-limit-selector');
-    let allNetworksData = []; // Store all network data for modals
+    const tableHeader = document.querySelector('#networks-container').closest('table').querySelector('thead');
 
     let currentPage = 1;
     let currentLimit = 10;
+    let currentSort = 'Name';
+    let currentOrder = 'asc';
 
     function reloadCurrentView() {
         loadNetworks(parseInt(currentPage), parseInt(currentLimit));
@@ -122,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
         networksContainer.innerHTML = '<tr><td colspan="9" class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></td></tr>';
 
         const searchTerm = searchInput.value.trim();
-        fetch(`${basePath}/api/hosts/${hostId}/networks?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`)
+        fetch(`${basePath}/api/hosts/${hostId}/networks?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}&sort=${currentSort}&order=${currentOrder}`)
             .then(response => response.json())
             .then(result => {
                 if (result.status === 'error') throw new Error(result.message);
@@ -139,7 +141,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         let subnetHtml = '<span class="text-muted small">N/A</span>';
                         let gatewayHtml = '<span class="text-muted small">N/A</span>';
-                        let ipamSubnet = '', ipamGateway = '', ipamIpRange = '';
                         if (net.IPAM && net.IPAM.Config && net.IPAM.Config.length > 0) {
                             const ipamConfig = net.IPAM.Config[0];
                             if (ipamConfig.Subnet) {
@@ -148,9 +149,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (ipamConfig.Gateway) {
                                 gatewayHtml = `<code>${ipamConfig.Gateway}</code>`;
                             }
-                            ipamSubnet = ipamConfig.Subnet || '';
-                            ipamGateway = ipamConfig.Gateway || '';
-                            ipamIpRange = ipamConfig.IPRange || '';
                         }
 
                         let containersHtml = '<span class="text-muted small">None</span>';
@@ -161,19 +159,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
 
                         const unusedBadge = isUnused && !isDefaultNetwork ? ' <span class="badge bg-secondary">Unused</span>' : '';
-                        const parentInterface = net.Options && net.Options.parent ? net.Options.parent : '';
-
-                        const editButton = `<button class="btn btn-sm btn-outline-warning edit-network-btn" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#networkModal" 
-                                                data-name="${name}" 
-                                                data-driver="${driver}"
-                                                data-subnet="${ipamSubnet}"
-                                                data-gateway="${ipamGateway}"
-                                                data-ip-range="${ipamIpRange}"
-                                                data-attachable="${net.Attachable ? '1' : '0'}"
-                                                data-parent="${parentInterface}"
-                                                title="Clone Network"><i class="bi bi-pencil-square"></i></button>`;
 
                         html += `<tr>
                                     <td><input class="form-check-input network-checkbox" type="checkbox" value="${net.Id}" data-name="${name}" ${isDefaultNetwork ? 'disabled' : ''}></td>
@@ -185,7 +170,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <td>${gatewayHtml}</td>
                                     <td>${containersHtml}</td>
                                     <td class="text-end">
-                                        ${editButton}
                                         <button class="btn btn-sm btn-outline-danger delete-network-btn" data-network-id="${net.Id}" data-network-name="${name}" ${isDefaultNetwork ? 'disabled title="Default networks cannot be removed."' : ''}><i class="bi bi-trash"></i></button>
                                     </td>
                                  </tr>`;
@@ -213,6 +197,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem(`host_${hostId}_networks_page`, result.current_page);
                 localStorage.setItem(`host_${hostId}_networks_limit`, result.limit);
 
+                // Update sort indicators in header
+                tableHeader.querySelectorAll('th.sortable').forEach(th => {
+                    th.classList.remove('asc', 'desc');
+                    if (th.dataset.sort === currentSort) {
+                        th.classList.add(currentOrder);
+                    }
+                });
+
             })
             .catch(error => networksContainer.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Failed to load networks: ${error.message}</td></tr>`)
             .finally(() => {
@@ -228,6 +220,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 loadNetworks(parseInt(pageLink.dataset.page), limitSelector.value);
             }
+        });
+
+        tableHeader.addEventListener('click', function(e) {
+            const th = e.target.closest('th.sortable');
+            if (!th) return;
+
+            const sortField = th.dataset.sort;
+            if (currentSort === sortField) {
+                currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort = sortField;
+                currentOrder = 'asc';
+            }
+            localStorage.setItem(`host_${hostId}_networks_sort`, currentSort);
+            localStorage.setItem(`host_${hostId}_networks_order`, currentOrder);
+            loadNetworks(1, limitSelector.value);
         });
 
         limitSelector.addEventListener('change', function() {
@@ -382,64 +390,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const driverSelect = document.getElementById('network-driver');
         const ipamContainer = document.getElementById('network-ipam-container');
         const macvlanContainer = document.getElementById('network-macvlan-container');
-        const modalTitle = document.getElementById('networkModalLabel');
         const saveBtn = document.getElementById('save-network-btn');
         const networkForm = document.getElementById('network-form');
-        const attachableContainer = document.getElementById('network-attachable-container');
 
         function toggleDriverSpecificOptions() {
             const driver = driverSelect.value;
             
-            // First, hide all conditional sections
-            macvlanContainer.style.display = 'none';
-            ipamContainer.style.display = 'none';
-            attachableContainer.style.display = 'none';
-
-            // Now, show the correct sections based on the driver
             if (driver === 'macvlan') {
                 macvlanContainer.style.display = 'block';
-                ipamContainer.style.display = 'block';
-                attachableContainer.style.display = 'block';
-            } else if (driver === 'overlay') {
-                ipamContainer.style.display = 'block';
-                attachableContainer.style.display = 'block';
-            } else if (driver === 'bridge') {
+            } else {
+                macvlanContainer.style.display = 'none';
+            }
+
+            // IPAM is not supported/relevant for host or none drivers
+            if (['host', 'none'].includes(driver)) {
+                ipamContainer.style.display = 'none';
+            } else {
                 ipamContainer.style.display = 'block';
             }
-            // For 'host' and 'none', nothing extra is shown.
         }
 
         driverSelect.addEventListener('change', toggleDriverSpecificOptions);
 
-        networkModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const isCloneMode = button && button.classList.contains('edit-network-btn');
-
+        networkModal.addEventListener('show.bs.modal', function() {
             networkForm.reset();
-
-            if (isCloneMode) {
-                modalTitle.textContent = 'Clone Network';
-                saveBtn.textContent = 'Create Cloned Network';
-                networkForm.querySelector('input[name="action"]').value = 'create';
-
-                // Populate form
-                const name = button.dataset.name;
-                document.getElementById('network-name').value = name + '-clone';
-                document.getElementById('network-driver').value = button.dataset.driver;
-                document.getElementById('ipam-subnet').value = button.dataset.subnet;
-                document.getElementById('ipam-gateway').value = button.dataset.gateway;
-                document.getElementById('ipam-ip_range').value = button.dataset.ipRange;
-                document.getElementById('network-attachable').checked = button.dataset.attachable === '1';
-                
-                document.getElementById('macvlan-parent-input').value = button.dataset.parent;
-            } else {
-                modalTitle.textContent = 'Add New Network';
-                saveBtn.textContent = 'Create Network';
-                networkForm.querySelector('input[name="action"]').value = 'create';
-            }
-
             // Reset to default visibility
-            driverSelect.value = isCloneMode ? button.dataset.driver : 'bridge';
+            driverSelect.value = 'bridge';
             toggleDriverSpecificOptions();
             document.getElementById('network-labels-container').innerHTML = '';
         });
@@ -490,6 +466,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function initialize() {
         const initialPage = parseInt(localStorage.getItem(`host_${hostId}_networks_page`)) || 1;
         const initialLimit = parseInt(localStorage.getItem(`host_${hostId}_networks_limit`)) || 10;
+        currentSort = localStorage.getItem(`host_${hostId}_networks_sort`) || 'Name';
+        currentOrder = localStorage.getItem(`host_${hostId}_networks_order`) || 'asc';
+        
         limitSelector.value = initialLimit;
 
         loadNetworks(initialPage, initialLimit);

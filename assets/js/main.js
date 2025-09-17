@@ -522,51 +522,36 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // --- AJAX Import Logic ---
-    const uploadBtn = document.getElementById('upload-yaml-btn');
-    const importForm = document.getElementById('import-form');
-    const yamlFile = document.getElementById('yamlFile');
-    const importError = document.getElementById('import-error-message');
-
-    if (uploadBtn) {
-        uploadBtn.addEventListener('click', function() {
-            if (!yamlFile.files.length) {
-                importError.textContent = 'Silakan pilih file terlebih dahulu.';
-                importError.classList.remove('d-none');
+    // --- Sync Stacks to Git Button ---
+    const syncStacksBtn = document.getElementById('sync-stacks-btn');
+    if (syncStacksBtn) {
+        syncStacksBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!confirm('Are you sure you want to sync all application stacks to the configured Git repository? This will overwrite existing files in the repo.')) {
                 return;
             }
 
-            const formData = new FormData(importForm);
-            const originalButtonText = uploadBtn.innerHTML;
+            const originalBtnText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Syncing...`;
 
-            uploadBtn.disabled = true;
-            uploadBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Mengunggah...`;
-            importError.classList.add('d-none');
-
-            fetch(`${basePath}/import`, {
-                method: 'POST',
-                body: formData
+            fetch(`${basePath}/api/stacks/sync-to-git`, {
+                method: 'POST'
             })
             .then(response => response.json().then(data => ({ ok: response.ok, data })))
             .then(({ ok, data }) => {
-                if (!ok) throw new Error(data.message || 'An unknown error occurred.');
-                // This block only runs on success
-                window.location.href = `${basePath}/history?status=success&message=${encodeURIComponent(data.message)}`;
+                showToast(data.message, ok);
             })
-            .catch(err => {
-                console.error('Import failed:', err);
-                importError.textContent = err.message;
-                importError.classList.remove('d-none');
+            .catch(error => {
+                showToast(error.message || 'An unknown error occurred during sync.', false);
             })
             .finally(() => {
-                // Re-enable the button if we are still on the page (i.e., an error occurred)
-                if (document.getElementById('upload-yaml-btn')) {
-                    uploadBtn.disabled = false;
-                    uploadBtn.innerHTML = originalButtonText;
-                }
+                this.disabled = false;
+                this.innerHTML = originalBtnText;
             });
         });
     }
+
 
     // --- Dashboard Widgets Logic ---
     function loadDashboardWidgets() {
